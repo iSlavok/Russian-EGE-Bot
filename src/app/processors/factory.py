@@ -1,11 +1,13 @@
 from app.enums import HandlerType
 from app.processors.base_processor import TaskProcessor
-from app.processors.impl import Task4DrillProcessor, Task4ExamProcessor
+from app.processors.impl import SkipProcessor, SoonProcessor, Task4DrillProcessor, Task4ExamProcessor
 from app.repositories import ExerciseRepository, UserAnswerRepository
 
 PROCESSOR_MAPPING = {
     HandlerType.TASK_4_DRILL: Task4DrillProcessor,
     HandlerType.TASK_4_EXAM: Task4ExamProcessor,
+    HandlerType.SKIP: SkipProcessor,
+    HandlerType.SOON: SoonProcessor,
 }
 
 

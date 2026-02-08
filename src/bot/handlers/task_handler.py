@@ -8,7 +8,7 @@ from app.services.category_service import CategoryService
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
 from bot.callback_datas import GetTaskCallbackData, SubmitAnswerCallbackData
-from bot.keyboards import get_task_options_keyboard
+from bot.keyboards import get_back_keyboard, get_task_options_keyboard
 from bot.services import MessageManager
 
 router = Router(name="task_router")
@@ -46,7 +46,8 @@ async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, m
         raise ValueError(msg)
     task = await task_service.start_task(user)
     back_category_id = user.current_category.parent_id or 0
-    keyboard = get_task_options_keyboard(task.options, back_category_id=back_category_id) if task.options else None
+    keyboard = get_task_options_keyboard(task.options, back_category_id=back_category_id) \
+        if task.options else get_back_keyboard(back_category_id=back_category_id)
     await message_manager.send_message(
         text=task.text,
         reply_markup=keyboard,
