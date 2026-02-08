@@ -1,6 +1,8 @@
+import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import BaseDBModel
@@ -13,6 +15,8 @@ class UserAnswer(BaseDBModel):
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     user_response: Mapped[str] = mapped_column(String(256), nullable=False)
     solve_time: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), default=None, index=True, nullable=True)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id"), index=True, nullable=False)
