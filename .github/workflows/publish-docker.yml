@@ -59,7 +59,6 @@ jobs:
         env:
           REGISTRY_USER: ${{ github.actor }}
           TOKEN: ${{ secrets.CR_PAT }}
-          WORK_DIR: ${{ secrets.DEPLOY_PATH }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
@@ -68,7 +67,7 @@ jobs:
           script: |
             echo $TOKEN | docker login ghcr.io -u $REGISTRY_USER --password-stdin
 
-            cd $WORK_DIR
+            cd ${{ secrets.DEPLOY_PATH }}
 
             docker compose --profile prod pull
             docker compose --profile prod up -d

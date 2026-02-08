@@ -16,6 +16,19 @@ services:
       - ./migrations:/src/migrations
     networks: [ bot_network ]
 
+  bot-prod:
+    image: ghcr.io/islavok/russian-ege-bot:latest
+    profiles: [ "prod" ]
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [ bot_network ]
+
   bot-migrate:
     build: .
     profiles: [ "migrate" ]
