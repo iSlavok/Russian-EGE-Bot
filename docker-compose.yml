@@ -1,0 +1,79 @@
+services:
+  bot-dev:
+    build: .
+    profiles: [ "dev" ]
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src/bot:/src/bot
+      - ./src/app:/src/app
+      - ./src/main.py:/src/main.py
+      - ./migrations:/src/migrations
+    networks: [ bot_network ]
+
+  bot-migrate:
+    build: .
+    profiles: [ "migrate" ]
+    env_file: .env
+    command: tail -f /dev/null
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src/bot:/src/bot
+      - ./src/app:/src/app
+      - ./src/main.py:/src/main.py
+      - ./migrations:/src/migrations
+      - ./alembic.ini:/src/alembic.ini
+    networks: [ bot_network ]
+
+  postgres:
+    image: postgres:17
+    profiles: [ "dev", "prod", "migrate" ]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bot_network
+    ports:
+      - "5439:5432"
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    profiles: [ "dev", "prod" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - bot_network
+    ports:
+      - "6367:6379"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  bot_network:
+    driver: bridge

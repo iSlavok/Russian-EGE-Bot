@@ -1,0 +1,57 @@
+[project]
+name = "russianegebot"
+version = "0.1.0"
+description = "A bot for Russian EGE exam preparation"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.22.0",
+    "alembic>=1.18.3",
+    "asyncpg>=0.30.0",
+    "dishka>=1.7.2",
+    "loguru>=0.7.3",
+    "pydantic>=2.11.10",
+    "pydantic-settings>=2.11.0",
+    "redis>=7.1.0",
+    "sqlalchemy>=2.0.44",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "pyright>=1.1.407",
+    "ruff>=0.14.3",
+]
+
+[tool.ruff]
+output-format = "concise"
+line-length = 120
+target-version = "py313"
+fix = false
+exclude = [".venv", "__pycache__", "*test*", "migration/versions", "exercise_prep/"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "B", "UP", "I", "SIM", "C4", "RUF", "ANN", "N", "S", "T", "Q", "A", "R", "B9", "W", "PL", "ISC",
+    "PIE", "PGH", "TID", "COM", "RET", "PTH", "G", "FA", "ERA", "TRY", "RSE", "SLF", "EXE", "NPY", "PD", "PERF", "PYI",
+    "EM", "INP", "PT", "DTZ", "LOG", "BLE", "TCH", "FBT", "ASYNC", "TD",
+]
+ignore = [
+    "RUF001",
+    "RUF002",
+    "TRY301",
+    "BLE001",
+    "TD002",
+    "TD003",
+    "PLR0913",
+    "S311",
+]
+extend-per-file-ignores = { "migrations/versions/*" = ["INP001"] }
+
+[tool.pyright]
+pythonVersion = "3.13"
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "**/tests",
+]
