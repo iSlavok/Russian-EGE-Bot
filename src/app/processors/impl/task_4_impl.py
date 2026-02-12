@@ -52,9 +52,15 @@ class Task4DrillProcessor(BaseTaskProcessor):
         ]
         random.shuffle(options)
 
+        word_with_context = content.word
+        if content.context_before:
+            word_with_context = f"{content.context_before} {word_with_context}"
+        if content.context_after:
+            word_with_context = f"{word_with_context} {content.context_after}"
+
         return TaskResponse(
             task_ui=TaskUI(
-                text=f"Выберите правильное ударение в слове: <b>{content.word}</b>.",
+                text=f"Выберите правильное ударение в слове: <b>{word_with_context}</b>.",
                 options=options,
             ),
             exercise_ids=exercise.id,
@@ -103,6 +109,10 @@ class Task4ExamProcessor(BaseTaskProcessor):
             stress_index = correct_stress_index if is_correct else content.incorrect_stress
 
             word_with_stress = _apply_stress(content.word, stress_index)
+            if content.context_before:
+                word_with_stress = f"{content.context_before} {word_with_stress}"
+            if content.context_after:
+                word_with_stress = f"{word_with_stress} {content.context_after}"
             words_with_stress.append(word_with_stress)
             stress_positions.append(stress_index)
 
