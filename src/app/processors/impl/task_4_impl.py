@@ -21,6 +21,16 @@ def _apply_stress(word: str, stress_index: int) -> str:
     return f"{word[:i]}{word[i].upper()}{word[i + 1:]}"
 
 
+def _add_context_to_word(word: str, content: Task4Content) -> str:
+    """Add context before/after the word if present in content."""
+    word_with_context = word
+    if content.context_before:
+        word_with_context = f"{content.context_before} {word_with_context}"
+    if content.context_after:
+        word_with_context = f"{word_with_context} {content.context_after}"
+    return word_with_context
+
+
 class Task4DrillProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         if user.current_category is None:
@@ -52,11 +62,7 @@ class Task4DrillProcessor(BaseTaskProcessor):
         ]
         random.shuffle(options)
 
-        word_with_context = content.word
-        if content.context_before:
-            word_with_context = f"{content.context_before} {word_with_context}"
-        if content.context_after:
-            word_with_context = f"{word_with_context} {content.context_after}"
+        word_with_context = _add_context_to_word(content.word, content)
 
         return TaskResponse(
             task_ui=TaskUI(
@@ -109,10 +115,7 @@ class Task4ExamProcessor(BaseTaskProcessor):
             stress_index = correct_stress_index if is_correct else content.incorrect_stress
 
             word_with_stress = _apply_stress(content.word, stress_index)
-            if content.context_before:
-                word_with_stress = f"{content.context_before} {word_with_stress}"
-            if content.context_after:
-                word_with_stress = f"{word_with_stress} {content.context_after}"
+            word_with_stress = _add_context_to_word(word_with_stress, content)
             words_with_stress.append(word_with_stress)
             stress_positions.append(stress_index)
 
