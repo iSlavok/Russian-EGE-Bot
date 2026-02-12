@@ -4,6 +4,8 @@ from pydantic import BaseModel
 class Task4Content(BaseModel):
     word: str
     incorrect_stress: int
+    context_before: str | None = None
+    context_after: str | None = None
 
 
 class Task4ExamConfig(BaseModel):
