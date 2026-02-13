@@ -193,10 +193,10 @@ class Task4ExamProcessor(BaseTaskProcessor):
 
         correct_numbers = "".join(str(i) for i in sorted(correct_indices))
         if not is_correct:
+            explanation = f"<b>Правильный ответ: {correct_numbers}</b>\n\n" + explanation
             explanation = f"Ваш ответ: {user_answer}\n" + explanation
-            explanation = f"Правильный ответ: {correct_numbers}\n\n" + explanation
         else:
-            explanation = f"Ответ: {correct_numbers}\n\n" + explanation
+            explanation = f"<b>Ответ: {correct_numbers}</b>\n\n" + explanation
 
         return CheckResult(
             is_correct=is_correct,
