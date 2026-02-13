@@ -19,5 +19,5 @@ def add_back_button(
     else:
         callback_data = "main"
     keyboard.inline_keyboard.append(
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data=callback_data)],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=callback_data, style="primary")],
     )

@@ -15,7 +15,16 @@ def get_task_options_keyboard(
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for option in options:
-        builder.button(text=option.text, callback_data=SubmitAnswerCallbackData(answer=option.value))
+        style = None
+        if option.value == "true":
+            style = "success"
+        elif option.value == "false":
+            style = "danger"
+        builder.button(
+            text=option.text,
+            callback_data=SubmitAnswerCallbackData(answer=option.value),
+            style=style,
+        )
     keyboard = builder.adjust(row_width).as_markup()
     keyboard = cast("InlineKeyboardMarkup", keyboard)
     add_back_button(keyboard, back_category_id)

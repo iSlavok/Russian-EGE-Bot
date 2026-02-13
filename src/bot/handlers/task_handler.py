@@ -67,7 +67,8 @@ async def submit_answer_button(
     await message_manager.clear_messages(keep_bot_last=1)
     result = await task_service.check_answer(user, callback_data.answer)
     response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
-    response_text += f"\n\n{result.explanation}"
+    if result.explanation:
+        response_text += f"\n\n{result.explanation}"
     await message_manager.edit_message(text=response_text)
     await send_new_task(user, task_service, message_manager)
     await session.commit()
@@ -91,7 +92,8 @@ async def sumit_answer(
     await message_manager.clear_messages(keep_bot_last=1)
     result = await task_service.check_answer(user, message.text)
     response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
-    response_text += f"\n\n{result.explanation}"
+    if result.explanation:
+        response_text += f"\n\n{result.explanation}"
     await message_manager.send_message(text=response_text)
     await send_new_task(user, task_service, message_manager)
     await session.commit()

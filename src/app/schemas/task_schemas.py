@@ -20,4 +20,4 @@ class TaskResponse(BaseModel):
 
 class CheckResult(BaseModel):
     is_correct: bool
-    explanation: str
+    explanation: str | None

@@ -55,4 +55,5 @@ exclude = [
     "**/__pycache__",
     ".venv",
     "**/tests",
+    "exercise_prep",
 ]
