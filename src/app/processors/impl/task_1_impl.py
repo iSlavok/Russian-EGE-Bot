@@ -1,5 +1,4 @@
 import html
-import re
 from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
@@ -8,23 +7,7 @@ from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task1Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
-
-
-def _create_answer_pattern(correct_answer: str) -> re.Pattern:
-    """Создает regex паттерн для проверки ответа.
-
-    Правила:
-    - Тире в ответе: юзер может заменить на пробел или пропустить
-    - Пробел в ответе: юзер может только пропустить (НЕ может заменить на тире)
-    - Буква ё: юзер может заменить на е
-    - Юзер НЕ может добавить пробелы/тире там, где их нет
-    """
-    pattern = correct_answer.lower()
-    pattern = re.escape(pattern)
-    pattern = pattern.replace(r"\-", r"[-\s]?")
-    pattern = pattern.replace(r"\ ", r"\s?")
-    pattern = pattern.replace("ё", "[её]")
-    return re.compile(f"^{pattern}$", re.IGNORECASE)
+from app.utils import check_answer
 
 
 class Task1ExamProcessor(BaseTaskProcessor):
@@ -77,7 +60,7 @@ class Task1ExamProcessor(BaseTaskProcessor):
         correct_answers = [ans.strip() for ans in exercise.answer.split(";")]
 
         is_correct = any(
-            _create_answer_pattern(correct_ans).match(user_answer.strip())
+            check_answer(user_answer, correct_ans)
             for correct_ans in correct_answers
         )
 
