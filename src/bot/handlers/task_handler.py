@@ -25,14 +25,15 @@ async def get_task(
         user_service: FromDishka[UserService],
         category_service: FromDishka[CategoryService],
 ) -> None:
+    await message_manager.edit_message(text="Загрузка задания...")
     categories = await category_service.get_by_id_with_tree(callback_data.category_id)
     await user_service.select_category(user=user, category=categories[0])
-    await message_manager.clear_messages()
     await send_new_task(
         user=user,
         task_service=task_service,
         message_manager=message_manager,
     )
+    await message_manager.clear_messages(keep_bot_last=1)
     await session.commit()
     await callback_query.answer()
 

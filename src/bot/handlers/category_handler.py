@@ -51,12 +51,13 @@ async def category_callback(
             ),
         )
     else:
+        await message_manager.edit_message(text="Загрузка задания...")
         await user_service.select_category(user=user, category=category)
-        await message_manager.clear_messages()
         await send_new_task(
             user=user,
             task_service=task_service,
             message_manager=message_manager,
         )
+        await message_manager.clear_messages(keep_bot_last=1)
         await session.commit()
     await callback_query.answer()
