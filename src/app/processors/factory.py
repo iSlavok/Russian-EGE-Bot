@@ -5,6 +5,7 @@ from app.processors.impl import (
     SoonProcessor,
     Task1DrillProcessor,
     Task2DrillProcessor,
+    Task3ExamProcessor,
     Task4DrillProcessor,
     Task4ExamProcessor,
     Task5DrillProcessor,
@@ -16,6 +17,7 @@ from app.repositories import ExerciseRepository, UserAnswerRepository
 PROCESSOR_MAPPING = {
     HandlerType.TASK_1_DRILL: Task1DrillProcessor,
     HandlerType.TASK_2_DRILL: Task2DrillProcessor,
+    HandlerType.TASK_3_EXAM: Task3ExamProcessor,
     HandlerType.TASK_4_DRILL: Task4DrillProcessor,
     HandlerType.TASK_4_EXAM: Task4ExamProcessor,
     HandlerType.TASK_5_DRILL: Task5DrillProcessor,
