@@ -10,3 +10,4 @@ class HandlerType(StrEnum):
     TASK_4_EXAM = "TASK_4_EXAM"
     TASK_5_DRILL = "TASK_5_DRILL"
     TASK_5_EXAM = "TASK_5_EXAM"
+    TASK_6_EXAM = "TASK_6_EXAM"
