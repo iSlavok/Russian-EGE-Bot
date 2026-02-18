@@ -10,7 +10,7 @@ from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import check_answer
 
 
-class Task1ExamProcessor(BaseTaskProcessor):
+class Task1DrillProcessor(BaseTaskProcessor):
     """Процессор для экзаменационного режима задания 1.
 
     Пользователь получает instruction и text, вводит ответ.
@@ -33,7 +33,7 @@ class Task1ExamProcessor(BaseTaskProcessor):
             raise ValueError(msg)
 
         exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
+            category_id=user.current_category.id,
             limit=1,
         )
         if not exercises:

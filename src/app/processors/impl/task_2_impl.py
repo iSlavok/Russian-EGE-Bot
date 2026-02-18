@@ -21,7 +21,7 @@ class Task2DrillProcessor(BaseTaskProcessor):
             raise ValueError(msg)
 
         exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
+            category_id=user.current_category.id,
             limit=1,
         )
         if not exercises:
