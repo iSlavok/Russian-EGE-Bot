@@ -39,6 +39,10 @@ class Task7DrillProcessor(BaseTaskProcessor):
 
         content = Task7Content.model_validate(exercise.content)
 
+        if content.incorrect_answer is None:
+            msg = f"Exercise {exercise.id} has no incorrect_answer in content for Task 7"
+            raise ValueError(msg)
+
         correct_phrase = content.phrase.format(word=exercise.answer.upper())
         incorrect_phrase = content.phrase.format(word=content.incorrect_answer.upper())
 
