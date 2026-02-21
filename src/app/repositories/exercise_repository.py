@@ -123,3 +123,30 @@ class ExerciseRepository(BaseRepository[Exercise]):
         rest_exercises = list(rest_result.scalars().all())
 
         return [required_exercise, *rest_exercises]
+
+    async def get_random_with_distinct_answer(
+        self, category_id: int, exclude_answer: str, limit: int,
+    ) -> Sequence[Exercise]:
+        """Получает случайные упражнения с уникальными значениями answer, исключая указанное."""
+        statement = (
+            select(Exercise)
+            .where(Exercise.category_id == category_id, Exercise.answer != exclude_answer)
+            .distinct(Exercise.answer)
+            .order_by(Exercise.answer, func.random())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def get_random_by_answer(
+        self, category_id: int, answer: str, limit: int,
+    ) -> Sequence[Exercise]:
+        """Получает случайные упражнения с конкретным значением answer."""
+        statement = (
+            select(Exercise)
+            .where(Exercise.category_id == category_id, Exercise.answer == answer)
+            .order_by(func.random())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().all()
