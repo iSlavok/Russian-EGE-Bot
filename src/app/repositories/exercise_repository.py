@@ -151,6 +151,44 @@ class ExerciseRepository(BaseRepository[Exercise]):
         result = await self.session.execute(statement)
         return result.scalars().all()
 
+    async def get_random_by_content_value(
+        self, category_id: int, content_field: str, content_value: str, limit: int,
+    ) -> Sequence[Exercise]:
+        """Получает случайные упражнения, где content->>content_field == content_value."""
+        statement = (
+            select(Exercise)
+            .where(
+                Exercise.category_id == category_id,
+                Exercise.content[content_field].as_string() == content_value,
+            )
+            .order_by(func.random())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def get_random_by_answer_and_content_value(
+        self,
+        category_id: int,
+        answer: str,
+        content_field: str,
+        content_value: str,
+        limit: int,
+    ) -> Sequence[Exercise]:
+        """Получает случайные упражнения с заданным answer и content->>content_field == content_value."""
+        statement = (
+            select(Exercise)
+            .where(
+                Exercise.category_id == category_id,
+                Exercise.answer == answer,
+                Exercise.content[content_field].as_string() == content_value,
+            )
+            .order_by(func.random())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
     async def get_random_same_answer_groups(
         self,
         category_id: int,
