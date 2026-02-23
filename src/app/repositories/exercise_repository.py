@@ -150,3 +150,54 @@ class ExerciseRepository(BaseRepository[Exercise]):
         )
         result = await self.session.execute(statement)
         return result.scalars().all()
+
+    async def get_random_same_answer_groups(
+        self,
+        category_id: int,
+        group_size: int,
+        num_groups: int,
+        exclude_ids: list[int] | None = None,
+    ) -> Sequence[Exercise]:
+        """Получает num_groups групп по group_size упражнений с одинаковым answer в каждой.
+
+        Каждая группа — случайный answer, в котором достаточно упражнений.
+        Возвращает плоский список; группировка по answer на стороне вызывающего.
+        Один SQL-запрос (CTE + window function).
+        """
+        base_filter = [Exercise.category_id == category_id]
+        if exclude_ids:
+            base_filter.append(Exercise.id.notin_(exclude_ids))
+
+        eligible_sq = (
+            select(Exercise.answer)
+            .where(*base_filter)
+            .group_by(Exercise.answer)
+            .having(func.count() >= group_size)
+            .order_by(func.random())
+            .limit(num_groups)
+        ).subquery()
+
+        rn = func.row_number().over(
+            partition_by=Exercise.answer,
+            order_by=func.random(),
+        ).label("rn")
+
+        inner = (
+            select(Exercise.id, rn)
+            .where(
+                Exercise.category_id == category_id,
+                Exercise.answer.in_(select(eligible_sq.c.answer)),
+            )
+        )
+        if exclude_ids:
+            inner = inner.where(Exercise.id.notin_(exclude_ids))
+        inner_sq = inner.subquery()
+
+        statement = (
+            select(Exercise)
+            .join(inner_sq, Exercise.id == inner_sq.c.id)
+            .where(inner_sq.c.rn <= group_size)
+        )
+
+        result = await self.session.execute(statement)
+        return result.scalars().all()
