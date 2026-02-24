@@ -8,6 +8,7 @@ from .task_7_schemas import Task7Content, Task7ExamConfig
 from .task_8_schemas import Task8Content, Task8ExamConfig
 from .task_9_12_schemas import TaskN9N12Content, TaskN9N12ExamConfig
 from .task_13_schemas import Task13Content, Task13ExamConfig
+from .task_14_schemas import Task14DrillContent, Task14ExamConfig, Task14ExamContent
 
 __all__ = [
     "Task1Content",
@@ -26,6 +27,9 @@ __all__ = [
     "Task8ExamConfig",
     "Task13Content",
     "Task13ExamConfig",
+    "Task14DrillContent",
+    "Task14ExamConfig",
+    "Task14ExamContent",
     "TaskN9N12Content",
     "TaskN9N12ExamConfig",
 ]

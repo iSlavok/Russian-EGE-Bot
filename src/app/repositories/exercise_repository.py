@@ -124,6 +124,19 @@ class ExerciseRepository(BaseRepository[Exercise]):
 
         return [required_exercise, *rest_exercises]
 
+    async def get_random_excluding_answer(
+        self, category_id: int, exclude_answer: str, limit: int,
+    ) -> Sequence[Exercise]:
+        """Получает случайные упражнения где answer != exclude_answer."""
+        statement = (
+            select(Exercise)
+            .where(Exercise.category_id == category_id, Exercise.answer != exclude_answer)
+            .order_by(func.random())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
     async def get_random_with_distinct_answer(
         self, category_id: int, exclude_answer: str, limit: int,
     ) -> Sequence[Exercise]:

@@ -18,6 +18,7 @@ from .task_9_12_impl import (
     Task12ExamProcessor,
 )
 from .task_13_impl import Task13DrillProcessor, Task13ExamProcessor
+from .task_14_impl import Task14DrillProcessor, Task14ExamProcessor
 
 __all__ = [
     "SkipProcessor",
@@ -44,4 +45,6 @@ __all__ = [
     "Task12ExamProcessor",
     "Task13DrillProcessor",
     "Task13ExamProcessor",
+    "Task14DrillProcessor",
+    "Task14ExamProcessor",
 ]
