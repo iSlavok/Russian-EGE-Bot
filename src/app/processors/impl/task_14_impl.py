@@ -156,7 +156,7 @@ class Task14ExamProcessor(BaseTaskProcessor):
 
         task_text = (
             f"Укажите варианты ответов, в которых оба выделенных слова пишутся "
-            f"<b>{answer_display}</b>. Запишите номера ответов.\n\n"
+            f"<b>{answer_display.upper()}</b>. Запишите номера ответов.\n\n"
         )
         for i, ex in enumerate(all_exs, start=1):
             content = Task14ExamContent.model_validate(ex.content)
