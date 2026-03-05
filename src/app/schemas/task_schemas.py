@@ -10,6 +10,7 @@ class TaskUI(BaseModel):
     text: str
     options: list[TaskOption] | None = None
     parse_mode: str = "HTML"
+    options_per_row: int = 1
 
 
 class TaskResponse(BaseModel):

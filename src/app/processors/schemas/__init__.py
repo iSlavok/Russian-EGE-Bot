@@ -10,6 +10,7 @@ from .task_9_12_schemas import TaskN9N12Content, TaskN9N12ExamConfig
 from .task_13_schemas import Task13Content, Task13ExamConfig
 from .task_14_schemas import Task14DrillContent, Task14ExamConfig, Task14ExamContent
 from .task_15_schemas import Task15DrillContent, Task15ExamConfig, Task15ExamContent
+from .task_16_schemas import Task16Content, Task16ExamConfig
 
 __all__ = [
     "Task1Content",
@@ -34,6 +35,8 @@ __all__ = [
     "Task15DrillContent",
     "Task15ExamConfig",
     "Task15ExamContent",
+    "Task16Content",
+    "Task16ExamConfig",
     "TaskN9N12Content",
     "TaskN9N12ExamConfig",
 ]
