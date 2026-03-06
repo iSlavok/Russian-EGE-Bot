@@ -31,6 +31,10 @@ from app.processors.impl import (
     Task15ExamProcessor,
     Task16DrillProcessor,
     Task16ExamProcessor,
+    Task17ExamProcessor,
+    Task18ExamProcessor,
+    Task19ExamProcessor,
+    Task20ExamProcessor,
 )
 from app.repositories import ExerciseRepository, UserAnswerRepository
 
@@ -63,6 +67,10 @@ PROCESSOR_MAPPING = {
     HandlerType.TASK_15_EXAM: Task15ExamProcessor,
     HandlerType.TASK_16_DRILL: Task16DrillProcessor,
     HandlerType.TASK_16_EXAM: Task16ExamProcessor,
+    HandlerType.TASK_17_EXAM: Task17ExamProcessor,
+    HandlerType.TASK_18_EXAM: Task18ExamProcessor,
+    HandlerType.TASK_19_EXAM: Task19ExamProcessor,
+    HandlerType.TASK_20_EXAM: Task20ExamProcessor,
     HandlerType.SKIP: SkipProcessor,
     HandlerType.SOON: SoonProcessor,
 }
