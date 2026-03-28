@@ -12,6 +12,14 @@ from .task_14_schemas import Task14DrillContent, Task14ExamConfig, Task14ExamCon
 from .task_15_schemas import Task15DrillContent, Task15ExamConfig, Task15ExamContent
 from .task_16_schemas import Task16Content, Task16ExamConfig
 from .task_17_20_schemas import TaskN17N20Content
+from .task_21_schemas import (
+    Task21ColonRule,
+    Task21CommaRule,
+    Task21DashRule,
+    Task21DrillContent,
+    Task21ExamContent,
+    Task21TaskType,
+)
 
 __all__ = [
     "Task1Content",
@@ -38,6 +46,12 @@ __all__ = [
     "Task15ExamContent",
     "Task16Content",
     "Task16ExamConfig",
+    "Task21ColonRule",
+    "Task21CommaRule",
+    "Task21DashRule",
+    "Task21DrillContent",
+    "Task21ExamContent",
+    "Task21TaskType",
     "TaskN9N12Content",
     "TaskN9N12ExamConfig",
     "TaskN17N20Content",

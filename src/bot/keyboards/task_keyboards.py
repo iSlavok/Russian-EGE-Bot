@@ -11,7 +11,7 @@ from bot.keyboards.back_button import add_back_button
 def get_task_options_keyboard(
         options: list[TaskOption],
         back_category_id: int,
-        row_width: int = 1,
+        row_width: int | list[int] = 1,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for option in options:
@@ -25,7 +25,8 @@ def get_task_options_keyboard(
             callback_data=SubmitAnswerCallbackData(answer=option.value),
             style=style,
         )
-    keyboard = builder.adjust(row_width).as_markup()
+    adjust_args = row_width if isinstance(row_width, list) else [row_width]
+    keyboard = builder.adjust(*adjust_args).as_markup()
     keyboard = cast("InlineKeyboardMarkup", keyboard)
     add_back_button(keyboard, back_category_id)
     return keyboard
