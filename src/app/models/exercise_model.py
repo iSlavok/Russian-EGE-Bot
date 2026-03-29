@@ -19,8 +19,8 @@ class Exercise(BaseDBModel):
 
     content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
-    answer: Mapped[str] = mapped_column(String(100), nullable=True)
-    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(String(256), nullable=True)
+    explanation: Mapped[str] = mapped_column(Text, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
