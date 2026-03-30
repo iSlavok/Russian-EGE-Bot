@@ -1,5 +1,6 @@
 import html
 from datetime import UTC, datetime
+from typing import cast
 
 from app.exceptions import TaskForUserNotFoundError
 from app.models import UserAnswer
@@ -85,7 +86,8 @@ class Task3ExamProcessor(BaseTaskProcessor):
         self._answer_repository.add(answer)
 
         correct = exercise.answer
-        explanation = html.escape(exercise.explanation, quote=False)
+        explanation = cast("str", exercise.explanation)
+        explanation = html.escape(explanation, quote=False)
         explanation = (
             f"<b>Текст:</b>\n"
             f"<blockquote expandable>{html.escape(content.text, quote=False)}</blockquote>\n\n"

@@ -26,6 +26,9 @@ class Task16DrillProcessor(BaseTaskProcessor):
         if user.current_category is None:
             msg = "User has no current category assigned"
             raise ValueError(msg)
+        if user.current_category.parent_id is None:
+            msg = "Current category must have a parent category for Task 7"
+            raise ValueError(msg)
 
         exercises = await self._exercise_repository.get_random(
             category_id=user.current_category.parent_id,
@@ -99,6 +102,9 @@ class Task16ExamProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         if user.current_category is None:
             msg = "User has no current category assigned"
+            raise ValueError(msg)
+        if user.current_category.parent_id is None:
+            msg = "Current category must have a parent category for Task 7"
             raise ValueError(msg)
 
         category_id = user.current_category.parent_id

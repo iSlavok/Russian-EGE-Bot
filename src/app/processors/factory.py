@@ -37,6 +37,8 @@ from app.processors.impl import (
     Task20ExamProcessor,
     Task21DrillProcessor,
     Task21ExamProcessor,
+    Task22DrillProcessor,
+    Task22ExamProcessor,
 )
 from app.repositories import ExerciseRepository, UserAnswerRepository
 
@@ -75,6 +77,8 @@ PROCESSOR_MAPPING = {
     HandlerType.TASK_20_EXAM: Task20ExamProcessor,
     HandlerType.TASK_21_DRILL: Task21DrillProcessor,
     HandlerType.TASK_21_EXAM: Task21ExamProcessor,
+    HandlerType.TASK_22_DRILL: Task22DrillProcessor,
+    HandlerType.TASK_22_EXAM: Task22ExamProcessor,
     HandlerType.SKIP: SkipProcessor,
     HandlerType.SOON: SoonProcessor,
 }

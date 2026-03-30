@@ -1,6 +1,6 @@
 from collections.abc import Iterable, Sequence
 
-from sqlalchemy import String, func, select
+from sqlalchemy import String, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Exercise
@@ -200,6 +200,66 @@ class ExerciseRepository(BaseRepository[Exercise]):
             .limit(limit)
         )
         result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def get_exam_22_exercises(self, category_id: int) -> Sequence[Exercise]:
+        """Возвращает 5 совместимых упражнений для exam-режима задания 22.
+
+        Использует рекурсивный CTE, который гарантирует:
+        - ответы (found_devices) 5 предложений взаимно не пересекаются с present-устройствами других
+        - other_devices никогда не попадут в варианты ответа
+        - суммарное число distinct present-устройств <= 19, то есть хватит 4 дистракторов из 23
+        """
+        sql = text("""
+            WITH RECURSIVE base_data AS (
+                SELECT
+                    id,
+                    string_to_array(answer, ';') AS a_arr,
+                    (string_to_array(answer, ';') ||
+                     COALESCE(ARRAY(SELECT jsonb_array_elements_text(content->'other_devices')), '{}')) AS p_arr
+                FROM exercises
+                WHERE category_id = :category_id AND is_active = true
+            ),
+            exam_path AS (
+                SELECT * FROM (
+                    SELECT
+                        ARRAY[id] AS ids,
+                        a_arr AS c_a,
+                        p_arr AS c_p,
+                        1 AS depth
+                    FROM base_data
+                    ORDER BY random()
+                    LIMIT 20
+                ) AS initial_step
+                UNION ALL
+                SELECT
+                    ep.ids || bd.id,
+                    ep.c_a || bd.a_arr,
+                    ep.c_p || bd.p_arr,
+                    ep.depth + 1
+                FROM exam_path ep
+                CROSS JOIN LATERAL (
+                    SELECT b.id, b.a_arr, b.p_arr
+                    FROM base_data b
+                    WHERE NOT (b.id = ANY(ep.ids))
+                      AND NOT (b.a_arr && ep.c_p)
+                      AND NOT (b.p_arr && ep.c_a)
+                    ORDER BY random()
+                    LIMIT 1
+                ) bd
+                WHERE ep.depth < 5
+            )
+            SELECT e.*
+            FROM (
+                SELECT ids FROM exam_path
+                WHERE depth = 5
+                  AND (SELECT count(DISTINCT x) FROM unnest(c_p) AS x) <= 19
+                LIMIT 1
+            ) chosen
+            JOIN exercises e ON e.id = ANY(chosen.ids)
+        """)
+        stmt = select(Exercise).from_statement(sql.bindparams(category_id=category_id))
+        result = await self.session.execute(stmt)
         return result.scalars().all()
 
     async def get_random_same_answer_groups(

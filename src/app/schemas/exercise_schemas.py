@@ -13,7 +13,7 @@ class ExerciseDTO(BaseModel):
     order_index: int | None
     content: dict[str, Any]
     answer: str
-    explanation: str
+    explanation: str | None
     is_active: bool
 
     @classmethod
