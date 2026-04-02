@@ -1,13 +1,12 @@
 import random
 import uuid
-from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task14DrillContent, Task14ExamConfig, Task14ExamContent
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.utils import extract_sorted_digits
 
 EXAM_SENTENCES = 5
 
@@ -37,17 +36,8 @@ class Task14DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        category = self._require_category(user)
+        exercise = await self._fetch_random_exercise(category.id, user.id)
 
         content = Task14DrillContent.model_validate(exercise.content)
 
@@ -75,18 +65,8 @@ class Task14DrillProcessor(BaseTaskProcessor):
 
         is_correct = user_answer == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        self._answer_repository.add(UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        ))
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task14DrillContent.model_validate(exercise.content)
         correct_display = _ANSWER_DISPLAY[exercise.answer]
@@ -124,11 +104,9 @@ class Task14ExamProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
+        category = self._require_category(user)
+        category_id = category.id
 
-        category_id = user.current_category.id
         answer_type = random.choices(_TASK_TYPES, weights=TYPE_WEIGHTS)[0]
         correct_count = random.choices([2, 3, 4], weights=CORRECT_COUNT_WEIGHTS)[0]
         wrong_count = EXAM_SENTENCES - correct_count
@@ -186,15 +164,11 @@ class Task14ExamProcessor(BaseTaskProcessor):
         config = Task14ExamConfig.model_validate(user.current_task_config)
 
         correct_answer = "".join(str(i + 1) for i in sorted(config.correct_indices))
-        user_digits = "".join(sorted(c for c in user_answer if c.isdigit()))
+        user_digits = extract_sorted_digits(user_answer)
         is_correct = user_digits == correct_answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        exercises_map = {ex.id: ex for ex in user.current_exercises}
-        ordered_exercises = [exercises_map[eid] for eid in config.exercise_ids]
+        solve_time = self._compute_solve_time(user)
+        ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         group_id = uuid.uuid4()
         details = ""
@@ -210,15 +184,7 @@ class Task14ExamProcessor(BaseTaskProcessor):
             details += f"<b>{sentence_num})</b> <i>{content.sentence}</i>\n"
             details += f"{ex.explanation}\n\n"
 
-            self._answer_repository.add(UserAnswer(
-                is_correct=sentence_right,
-                user_response=user_answer,
-                solve_time=solve_time,
-                group_id=group_id,
-                user_id=user.id,
-                exercise_id=ex.id,
-                category_id=user.current_category_id,
-            ))
+            self._record_answer(user, ex.id, sentence_right, user_answer, solve_time, group_id)
 
         if is_correct:
             explanation = f"<b>Ответ: {correct_answer}</b>"

@@ -1,6 +1,16 @@
 import re
 
 
+def extract_sorted_digits(answer: str) -> str:
+    """Extracts digits from a string and returns them sorted."""
+    return "".join(sorted(c for c in answer if c.isdigit()))
+
+
+def extract_digits(answer: str) -> str:
+    """Extracts digits from a string preserving their order."""
+    return "".join(c for c in answer if c.isdigit())
+
+
 def check_answer(
     user_answer: str,
     correct_answer: str,

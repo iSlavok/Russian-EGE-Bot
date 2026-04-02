@@ -1,8 +1,5 @@
 import html
-from datetime import UTC, datetime
 
-from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task1Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -25,21 +22,9 @@ class Task1DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 4"
-            raise ValueError(msg)
+        category = self._require_category(user)
+        exercise = await self._fetch_random_exercise(category.id, user.id)
 
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-
-        exercise = exercises[0]
         content = Task1Content.model_validate(exercise.content)
 
         task_text = f"{content.instruction}\n\n<i>{html.escape(content.text, quote=False)}</i>"
@@ -64,19 +49,8 @@ class Task1DrillProcessor(BaseTaskProcessor):
             for correct_ans in correct_answers
         )
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        answer = UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        )
-        self._answer_repository.add(answer)
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task1Content.model_validate(exercise.content)
         explanation = f"{content.instruction}\n\n{exercise.explanation}"

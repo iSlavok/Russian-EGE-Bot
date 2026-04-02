@@ -1,9 +1,7 @@
 import random
 import uuid
-from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task4Content, Task4ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -33,20 +31,8 @@ def _add_context_to_word(word: str, content: Task4Content) -> str:
 
 class Task4DrillProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 4"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        parent_id = self._require_parent_category_id(user)
+        exercise = await self._fetch_random_exercise(parent_id, user.id)
 
         content = Task4Content.model_validate(exercise.content)
         if not exercise.answer.isdigit():
@@ -84,15 +70,10 @@ class Task4ExamProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 4"
-            raise ValueError(msg)
+        parent_id = self._require_parent_category_id(user)
 
         exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
+            category_id=parent_id,
             limit=EXAM_WORDS_COUNT,
         )
         if len(exercises) < EXAM_WORDS_COUNT:
@@ -147,9 +128,7 @@ class Task4ExamProcessor(BaseTaskProcessor):
             raise ValueError(msg)
 
         config = Task4ExamConfig.model_validate(user.current_task_config)
-
-        exercises_map = {ex.id: ex for ex in user.current_exercises}
-        ordered_exercises = [exercises_map[ex_id] for ex_id in config.exercise_ids]
+        ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         user_selected = {int(char) for char in user_answer if char.isdigit()}
         correct_indices = set()
@@ -158,37 +137,22 @@ class Task4ExamProcessor(BaseTaskProcessor):
                 msg = f"Exercise answer must be a digit (exercise {exercise.id})"
                 raise ValueError(msg)
             correct_stress_index = int(exercise.answer)
-
             shown_stress = config.stress_positions[i - 1]
-
             if shown_stress == correct_stress_index:
                 correct_indices.add(i)
 
         is_correct = user_selected == correct_indices
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
+        solve_time = self._compute_solve_time(user)
         group_id = uuid.uuid4()
 
         explanation = ""
         for i, exercise in enumerate(ordered_exercises, start=1):
             word_is_correct = i in correct_indices
             user_selected_word = i in user_selected
-
             word_answer_is_correct = word_is_correct == user_selected_word
 
-            answer = UserAnswer(
-                is_correct=word_answer_is_correct,
-                user_response=user_answer,
-                solve_time=solve_time,
-                group_id=group_id,
-                user_id=user.id,
-                exercise_id=exercise.id,
-                category_id=user.current_category_id,
-            )
-            self._answer_repository.add(answer)
+            self._record_answer(user, exercise.id, word_answer_is_correct, user_answer, solve_time, group_id)
             explanation += f"{i}) {exercise.explanation}\n"
 
         correct_numbers = "".join(str(i) for i in sorted(correct_indices))

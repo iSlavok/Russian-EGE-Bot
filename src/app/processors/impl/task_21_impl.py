@@ -1,7 +1,3 @@
-from datetime import UTC, datetime
-
-from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas.task_21_schemas import (
     Task21ColonRule,
@@ -13,6 +9,7 @@ from app.processors.schemas.task_21_schemas import (
 )
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.utils import extract_sorted_digits
 
 DRILL_OPTIONS_PER_ROW: dict[Task21TaskType, int | list[int]] = {
     Task21TaskType.COMMA: [1, 1, 1, 1, 2, 2, 2, 2, 2],
@@ -94,17 +91,8 @@ class Task21DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        category = self._require_category(user)
+        exercise = await self._fetch_random_exercise(category.id, user.id)
 
         content = Task21DrillContent.model_validate(exercise.content)
         rule_names = _RULE_NAMES_BY_TYPE[content.task_type]
@@ -125,18 +113,8 @@ class Task21DrillProcessor(BaseTaskProcessor):
 
         is_correct = user_answer == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        self._answer_repository.add(UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        ))
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task21DrillContent.model_validate(exercise.content)
         correct_name = _rule_name(content.task_type, exercise.answer)
@@ -163,17 +141,8 @@ class Task21ExamProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        category = self._require_category(user)
+        exercise = await self._fetch_random_exercise(category.id, user.id)
 
         content = Task21ExamContent.model_validate(exercise.content)
         task_text = f"{_EXAM_FORMULATION[content.task_type]}\n\n<i>{content.full_text}</i>"
@@ -189,21 +158,11 @@ class Task21ExamProcessor(BaseTaskProcessor):
             raise ValueError(msg)
         exercise = user.current_exercises[0]
 
-        user_digits = "".join(sorted(c for c in user_answer if c.isdigit()))
+        user_digits = extract_sorted_digits(user_answer)
         is_correct = user_digits == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        self._answer_repository.add(UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        ))
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task21ExamContent.model_validate(exercise.content)
         rule_name = _rule_name(content.task_type, content.answer_rule)

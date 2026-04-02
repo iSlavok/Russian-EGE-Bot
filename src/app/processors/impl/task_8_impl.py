@@ -1,13 +1,12 @@
 import random
 import uuid
-from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task8Content, Task8ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.utils import extract_digits
 
 EXAM_ERROR_COUNT = 5
 EXAM_CORRECT_COUNT = 4
@@ -52,15 +51,10 @@ class Task8DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 8"
-            raise ValueError(msg)
+        parent_id = self._require_parent_category_id(user)
 
         exercises = await self._exercise_repository.get_random_with_content_filter(
-            category_id=user.current_category.parent_id,
+            category_id=parent_id,
             content_field="corrected_sentence",
             limit=1,
         )
@@ -96,19 +90,8 @@ class Task8DrillProcessor(BaseTaskProcessor):
 
         is_correct = user_answer == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        answer = UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        )
-        self._answer_repository.add(answer)
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task8Content.model_validate(exercise.content)
         correct_label = ERROR_TYPE_SHORT_LABELS.get(exercise.answer, exercise.answer)
@@ -141,14 +124,7 @@ class Task8ExamProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 8"
-            raise ValueError(msg)
-
-        parent_id = user.current_category.parent_id
+        parent_id = self._require_parent_category_id(user)
 
         error_exercises = list(await self._exercise_repository.get_random_with_distinct_answer(
             category_id=parent_id,
@@ -212,9 +188,7 @@ class Task8ExamProcessor(BaseTaskProcessor):
             raise ValueError(msg)
 
         config = Task8ExamConfig.model_validate(user.current_task_config)
-
-        exercises_map = {ex.id: ex for ex in user.current_exercises}
-        ordered_exercises = [exercises_map[ex_id] for ex_id in config.exercise_ids]
+        ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         correct_answer = ""
         for error_type in config.error_type_order:
@@ -223,13 +197,10 @@ class Task8ExamProcessor(BaseTaskProcessor):
                     correct_answer += str(i)
                     break
 
-        user_digits = "".join(c for c in user_answer if c.isdigit())
+        user_digits = extract_digits(user_answer)
         is_correct = user_digits == correct_answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
+        solve_time = self._compute_solve_time(user)
         group_id = uuid.uuid4()
 
         user_selected = {int(c) for c in user_digits if c.isdigit() and 1 <= int(c) <= EXAM_TOTAL_COUNT}
@@ -257,16 +228,7 @@ class Task8ExamProcessor(BaseTaskProcessor):
 
             explanation += "</blockquote>\n"
 
-            user_answer_record = UserAnswer(
-                is_correct=word_correct,
-                user_response=user_answer,
-                solve_time=solve_time,
-                group_id=group_id,
-                user_id=user.id,
-                exercise_id=exercise.id,
-                category_id=user.current_category_id,
-            )
-            self._answer_repository.add(user_answer_record)
+            self._record_answer(user, exercise.id, word_correct, user_answer, solve_time, group_id)
 
         if is_correct:
             explanation = f"<b>Ответ: {correct_answer}</b>\n\n" + explanation

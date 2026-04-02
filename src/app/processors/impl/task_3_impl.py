@@ -1,23 +1,16 @@
 import html
-from datetime import UTC, datetime
 from typing import cast
 
-from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task3Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.utils import extract_sorted_digits
 
 INSTRUCTION = (
     "Укажите варианты ответов, в которых даны верные характеристики фрагмента текста. "
     "Запишите номера ответов."
 )
-
-
-def _normalize_digits(answer: str) -> str:
-    """Извлекает цифры из строки и возвращает их в отсортированном виде."""
-    return "".join(sorted(c for c in answer if c.isdigit()))
 
 
 class Task3ExamProcessor(BaseTaskProcessor):
@@ -28,18 +21,9 @@ class Task3ExamProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
+        category = self._require_category(user)
+        exercise = await self._fetch_random_exercise(category.id, user.id)
 
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-
-        exercise = exercises[0]
         content = Task3Content.model_validate(exercise.content)
 
         statements_text = "\n".join(
@@ -69,21 +53,10 @@ class Task3ExamProcessor(BaseTaskProcessor):
         exercise = user.current_exercises[0]
         content = Task3Content.model_validate(exercise.content)
 
-        is_correct = _normalize_digits(user_answer) == _normalize_digits(exercise.answer)
+        is_correct = extract_sorted_digits(user_answer) == extract_sorted_digits(exercise.answer)
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        answer = UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        )
-        self._answer_repository.add(answer)
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         correct = exercise.answer
         explanation = cast("str", exercise.explanation)

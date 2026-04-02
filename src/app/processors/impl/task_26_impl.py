@@ -1,29 +1,16 @@
-from datetime import UTC, datetime
-
-from app.exceptions import TaskForUserNotFoundError
-from app.models import UserAnswer
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task26Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
-from app.utils import split_html_text
+from app.utils import extract_digits, split_html_text
 
 
 class Task26ExamProcessor(BaseTaskProcessor):
     """Задание 26 — средства связи предложений в тексте."""
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        category = self._require_category(user)
+        exercise = await self._fetch_random_exercise(category.id, user.id)
 
         content = Task26Content.model_validate(exercise.content)
         task_text = f"{content.task}\n\n<i>{content.sentences}</i>"
@@ -42,21 +29,11 @@ class Task26ExamProcessor(BaseTaskProcessor):
             raise ValueError(msg)
         exercise = user.current_exercises[0]
 
-        user_clean = "".join(c for c in user_answer if c.isdigit())
+        user_clean = extract_digits(user_answer)
         is_correct = user_clean == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        self._answer_repository.add(UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        ))
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         if is_correct:
             header = f"<b>Ответ:</b> {exercise.answer}"

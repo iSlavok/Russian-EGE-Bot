@@ -1,13 +1,13 @@
 import random
 import uuid
-from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
-from app.models import Exercise, UserAnswer
+from app.models import Exercise
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task13Content, Task13ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.utils import extract_sorted_digits
 
 EXAM_SENTENCES = 5
 CORRECT_COUNT_WEIGHTS = [4, 4, 1]
@@ -28,20 +28,8 @@ _MODE_NE_NI = "НЕ/НИ"
 class Task13DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        parent_id = self._require_parent_category_id(user)
+        exercise = await self._fetch_random_exercise(parent_id, user.id)
 
         content = Task13Content.model_validate(exercise.content)
 
@@ -68,18 +56,8 @@ class Task13DrillProcessor(BaseTaskProcessor):
 
         is_correct = user_answer == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        self._answer_repository.add(UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        ))
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         correct_display = _ANSWER_DISPLAY[exercise.answer]
         if is_correct:
@@ -98,14 +76,8 @@ class Task13DrillProcessor(BaseTaskProcessor):
 class Task13ExamProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category"
-            raise ValueError(msg)
+        parent_id = self._require_parent_category_id(user)
 
-        category_id = user.current_category.parent_id
         mode = random.choices([_MODE_NE, _MODE_NE_NI], weights=[90, 10])[0]
         answer_type = random.choice([_TOGETHER, _SEPARATE])
         correct_count = random.choices([2, 3, 4], weights=CORRECT_COUNT_WEIGHTS)[0]
@@ -114,11 +86,11 @@ class Task13ExamProcessor(BaseTaskProcessor):
 
         if mode == _MODE_NE:
             all_exs = await self._fetch_ne_exercises(
-                category_id, answer_type, opposite_answer, correct_count, wrong_count,
+                parent_id, answer_type, opposite_answer, correct_count, wrong_count,
             )
         else:
             all_exs = await self._fetch_ne_ni_exercises(
-                category_id, answer_type, opposite_answer, correct_count,
+                parent_id, answer_type, opposite_answer, correct_count,
             )
 
         if all_exs is None:
@@ -236,15 +208,11 @@ class Task13ExamProcessor(BaseTaskProcessor):
         config = Task13ExamConfig.model_validate(user.current_task_config)
 
         correct_answer = "".join(str(i + 1) for i in sorted(config.correct_indices))
-        user_digits = "".join(sorted(c for c in user_answer if c.isdigit()))
+        user_digits = extract_sorted_digits(user_answer)
         is_correct = user_digits == correct_answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        exercises_map = {ex.id: ex for ex in user.current_exercises}
-        ordered_exercises = [exercises_map[eid] for eid in config.exercise_ids]
+        solve_time = self._compute_solve_time(user)
+        ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         group_id = uuid.uuid4()
         details = ""
@@ -261,15 +229,7 @@ class Task13ExamProcessor(BaseTaskProcessor):
             details += f"<b>{sentence_num})</b> {content.sentence}\n"
             details += f"<i>Пишется {answer_display}. {ex.explanation}</i>\n\n"
 
-            self._answer_repository.add(UserAnswer(
-                is_correct=sentence_right,
-                user_response=user_answer,
-                solve_time=solve_time,
-                group_id=group_id,
-                user_id=user.id,
-                exercise_id=ex.id,
-                category_id=user.current_category_id,
-            ))
+            self._record_answer(user, ex.id, sentence_right, user_answer, solve_time, group_id)
 
         if is_correct:
             explanation = f"<b>Ответ: {correct_answer}</b>"

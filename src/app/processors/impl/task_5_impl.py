@@ -2,10 +2,9 @@ import html
 import random
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
-from app.models import Exercise, UserAnswer
+from app.models import Exercise
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task5Content, Task5ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -23,24 +22,12 @@ class Task5DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 5"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        parent_id = self._require_parent_category_id(user)
+        exercise = await self._fetch_random_exercise(parent_id, user.id)
 
         content = Task5Content.model_validate(exercise.content)
 
-        word_placeholder = html.escape("< . . . >", quote=False)
+        word_placeholder = html.escape("< . . . >", quote=False)
         sentence = content.sentence.format(word=word_placeholder)
 
         options = [
@@ -132,15 +119,10 @@ class Task5ExamProcessor(BaseTaskProcessor):
         return selected
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 5"
-            raise ValueError(msg)
+        parent_id = self._require_parent_category_id(user)
 
         exercises_pool = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
+            category_id=parent_id,
             limit=EXAM_INITIAL_POOL_SIZE,
         )
 
@@ -199,9 +181,7 @@ class Task5ExamProcessor(BaseTaskProcessor):
             raise ValueError(msg)
 
         config = Task5ExamConfig.model_validate(user.current_task_config)
-
-        exercises_map = {ex.id: ex for ex in user.current_exercises}
-        ordered_exercises = [exercises_map[ex_id] for ex_id in config.exercise_ids]
+        ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         wrong_exercise = ordered_exercises[config.wrong_sentence_index]
         wrong_exercise_content = Task5Content.model_validate(wrong_exercise.content)
@@ -221,25 +201,12 @@ class Task5ExamProcessor(BaseTaskProcessor):
             allow_space_omission=False,
         )
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
+        solve_time = self._compute_solve_time(user)
         group_id = uuid.uuid4()
 
         for i, exercise in enumerate(ordered_exercises):
             exercise_is_correct = is_correct if i == config.wrong_sentence_index else True
-
-            answer = UserAnswer(
-                is_correct=exercise_is_correct,
-                user_response=user_answer,
-                solve_time=solve_time,
-                group_id=group_id,
-                user_id=user.id,
-                exercise_id=exercise.id,
-                category_id=user.current_category_id,
-            )
-            self._answer_repository.add(answer)
+            self._record_answer(user, exercise.id, exercise_is_correct, user_answer, solve_time, group_id)
 
         word_text = correct_word.lower()
         if wrong_exercise_content.sentence.lstrip().startswith("{word}"):

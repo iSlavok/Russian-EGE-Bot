@@ -1,4 +1,3 @@
-from app.exceptions import TaskForUserNotFoundError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task2Content
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -13,20 +12,8 @@ class Task2DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category for Task 2"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        parent_id = self._require_parent_category_id(user)
+        exercise = await self._fetch_random_exercise(parent_id, user.id)
 
         content = Task2Content.model_validate(exercise.content)
 

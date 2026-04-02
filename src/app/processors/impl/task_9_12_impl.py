@@ -1,15 +1,14 @@
 import random
 import uuid
 from collections import defaultdict
-from datetime import UTC, datetime
 
 from app.exceptions import TaskForUserNotFoundError
-from app.models import Exercise, UserAnswer
+from app.models import Exercise
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import TaskN9N12Content, TaskN9N12ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
-from app.utils import check_answer
+from app.utils import check_answer, extract_sorted_digits
 
 EXAM_ROWS = 5
 CORRECT_COUNT_WEIGHTS = [4, 4, 1]
@@ -138,20 +137,8 @@ class _BaseN9N12DrillProcessor(BaseTaskProcessor):
     TASK_DESCRIPTION: str = "Выберите правильный вариант ответа, вставив пропущенную букву в слово."
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category"
-            raise ValueError(msg)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=user.current_category.parent_id,
-            limit=1,
-        )
-        if not exercises:
-            raise TaskForUserNotFoundError(user.id)
-        exercise = exercises[0]
+        parent_id = self._require_parent_category_id(user)
+        exercise = await self._fetch_random_exercise(parent_id, user.id)
 
         content = TaskN9N12Content.model_validate(exercise.content)
 
@@ -186,18 +173,8 @@ class _BaseN9N12DrillProcessor(BaseTaskProcessor):
             allow_space_omission=False,
         )
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        self._answer_repository.add(UserAnswer(
-            is_correct=is_correct,
-            user_response=user_answer,
-            solve_time=solve_time,
-            user_id=user.id,
-            exercise_id=exercise.id,
-            category_id=user.current_category_id,
-        ))
+        solve_time = self._compute_solve_time(user)
+        self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = TaskN9N12Content.model_validate(exercise.content)
         correct_word = _word_display(content.word, exercise.answer.upper())
@@ -219,14 +196,7 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
     WORDS_PER_ROW: int
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
-        if user.current_category.parent_id is None:
-            msg = "Current category must have a parent category"
-            raise ValueError(msg)
-
-        category_id = user.current_category.parent_id
+        parent_id = self._require_parent_category_id(user)
         wpr = self.WORDS_PER_ROW
 
         correct_count = random.choices([2, 3, 4], weights=CORRECT_COUNT_WEIGHTS)[0]
@@ -234,7 +204,7 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
 
         correct_exercises = list(
             await self._exercise_repository.get_random_same_answer_groups(
-                category_id=category_id,
+                category_id=parent_id,
                 group_size=wpr,
                 num_groups=correct_count,
             ),
@@ -251,7 +221,7 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
         used_ids = {e.id for e in correct_exercises}
 
         wrong_pool = list(await self._exercise_repository.get_random(
-            category_id=category_id,
+            category_id=parent_id,
             limit=wrong_count * wpr * 3,
         ))
         remaining = [ex for ex in wrong_pool if ex.id not in used_ids]
@@ -310,15 +280,11 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
         words_per_row = config.words_per_row
 
         correct_answer = "".join(str(i + 1) for i in sorted(config.correct_row_indices))
-        user_digits = "".join(sorted(c for c in user_answer if c.isdigit()))
+        user_digits = extract_sorted_digits(user_answer)
         is_correct = user_digits == correct_answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
-
-        exercises_map = {ex.id: ex for ex in user.current_exercises}
-        ordered_exercises = [exercises_map[eid] for eid in config.exercise_ids]
+        solve_time = self._compute_solve_time(user)
+        ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         group_id = uuid.uuid4()
 
@@ -345,15 +311,7 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
                 details += "\n"
 
             for ex in row_exs:
-                self._answer_repository.add(UserAnswer(
-                    is_correct=row_right,
-                    user_response=user_answer,
-                    solve_time=solve_time,
-                    group_id=group_id,
-                    user_id=user.id,
-                    exercise_id=ex.id,
-                    category_id=user.current_category_id,
-                ))
+                self._record_answer(user, ex.id, row_right, user_answer, solve_time, group_id)
 
         if is_correct:
             explanation = f"<b>Ответ: {correct_answer}</b>"
