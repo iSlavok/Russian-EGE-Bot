@@ -8,6 +8,7 @@ class TaskOption(BaseModel):
 
 class TaskUI(BaseModel):
     text: str
+    text_continuation: str | None = None
     options: list[TaskOption] | None = None
     parse_mode: str = "HTML"
     options_per_row: int | list[int] = 1

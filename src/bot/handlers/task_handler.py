@@ -7,11 +7,28 @@ from app.schemas import UserWithExercisesDTO
 from app.services.category_service import CategoryService
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
+from app.utils.text_utils import split_html_text
 from bot.callback_datas import GetTaskCallbackData, SubmitAnswerCallbackData
 from bot.keyboards import get_back_keyboard, get_task_options_keyboard
 from bot.services import MessageManager
 
 router = Router(name="task_router")
+
+
+async def _send_result(message_manager: MessageManager, text: str, *, use_edit: bool) -> None:
+    """Отправляет текст результата, разбивая на 2 сообщения при превышении лимита TG."""
+    parts = split_html_text(text)
+    if len(parts) == 1:
+        if use_edit:
+            await message_manager.edit_message(text=text)
+        else:
+            await message_manager.send_message(text=text)
+    else:
+        if use_edit:
+            await message_manager.edit_message(text=parts[0])
+        else:
+            await message_manager.send_message(text=parts[0])
+        await message_manager.send_message(text=parts[1], clear_previous=False)
 
 
 @router.callback_query(GetTaskCallbackData.filter())
@@ -28,17 +45,17 @@ async def get_task(
     await message_manager.edit_message(text="Загрузка задания...")
     categories = await category_service.get_by_id_with_tree(callback_data.category_id)
     await user_service.select_category(user=user, category=categories[0])
-    await send_new_task(
+    parts_count = await send_new_task(
         user=user,
         task_service=task_service,
         message_manager=message_manager,
     )
-    await message_manager.clear_messages(keep_bot_last=1)
+    await message_manager.clear_messages(keep_bot_last=parts_count)
     await session.commit()
     await callback_query.answer()
 
 
-async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, message_manager: MessageManager) -> None:
+async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, message_manager: MessageManager) -> int:
     if not user.current_category:
         msg = "User does not have a current category set."
         raise ValueError(msg)
@@ -52,11 +69,20 @@ async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, m
         back_category_id=back_category_id,
         row_width=task.options_per_row,
     ) if task.options else get_back_keyboard(back_category_id=back_category_id)
+    if task.text_continuation:
+        await message_manager.send_message(text=task.text, clear_previous=False)
+        await message_manager.send_message(
+            text=task.text_continuation,
+            reply_markup=keyboard,
+            clear_previous=False,
+        )
+        return 2
     await message_manager.send_message(
         text=task.text,
         reply_markup=keyboard,
         clear_previous=False,
     )
+    return 1
 
 
 @router.callback_query(SubmitAnswerCallbackData.filter())
@@ -73,7 +99,7 @@ async def submit_answer_button(
     response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
     if result.explanation:
         response_text += f"\n\n{result.explanation}"
-    await message_manager.edit_message(text=response_text)
+    await _send_result(message_manager, response_text, use_edit=True)
     await send_new_task(user, task_service, message_manager)
     await session.commit()
     await callback_query.answer()
@@ -98,6 +124,6 @@ async def sumit_answer(
     response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
     if result.explanation:
         response_text += f"\n\n{result.explanation}"
-    await message_manager.send_message(text=response_text)
+    await _send_result(message_manager, response_text, use_edit=False)
     await send_new_task(user, task_service, message_manager)
     await session.commit()
