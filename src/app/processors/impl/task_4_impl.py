@@ -1,7 +1,12 @@
 import random
 import uuid
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidExerciseCountError,
+    InvalidExerciseDataError,
+    MissingTaskConfigError,
+    TaskForUserNotFoundError,
+)
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task4Content, Task4ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -36,8 +41,7 @@ class Task4DrillProcessor(BaseTaskProcessor):
 
         content = Task4Content.model_validate(exercise.content)
         if not exercise.answer.isdigit():
-            msg = "Exercise answer must be a digit representing stress index"
-            raise ValueError(msg)
+            raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
         answer = int(exercise.answer)
 
         correct_word = _apply_stress(content.word, answer)
@@ -88,8 +92,7 @@ class Task4ExamProcessor(BaseTaskProcessor):
         for i, exercise in enumerate(exercises):
             content = Task4Content.model_validate(exercise.content)
             if not exercise.answer.isdigit():
-                msg = f"Exercise answer must be a digit representing stress index (exercise {exercise.id})"
-                raise ValueError(msg)
+                raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
             correct_stress_index = int(exercise.answer)
 
             is_correct = i in correct_indices
@@ -120,12 +123,10 @@ class Task4ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises or len(user.current_exercises) != EXAM_WORDS_COUNT:
-            msg = "User must have exactly 5 current exercises for TASK_4_EXAM"
-            raise ValueError(msg)
+            raise InvalidExerciseCountError(EXAM_WORDS_COUNT, len(user.current_exercises or []))
 
         if user.current_task_config is None:
-            msg = "Task config is required for TASK_4_EXAM"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = Task4ExamConfig.model_validate(user.current_task_config)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
@@ -134,8 +135,7 @@ class Task4ExamProcessor(BaseTaskProcessor):
         correct_indices = set()
         for i, exercise in enumerate(ordered_exercises, start=1):
             if not exercise.answer.isdigit():
-                msg = f"Exercise answer must be a digit (exercise {exercise.id})"
-                raise ValueError(msg)
+                raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
             correct_stress_index = int(exercise.answer)
             shown_stress = config.stress_positions[i - 1]
             if shown_stress == correct_stress_index:

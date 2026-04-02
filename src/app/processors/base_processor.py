@@ -2,7 +2,12 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidCategoryStructureError,
+    NoCategoryError,
+    NoCurrentExercisesError,
+    TaskForUserNotFoundError,
+)
 from app.models import Exercise, UserAnswer
 from app.processors.interface import TaskProcessor
 from app.repositories import ExerciseRepository, UserAnswerRepository
@@ -27,16 +32,14 @@ class BaseTaskProcessor(ABC, TaskProcessor):
     def _require_category(user: UserWithCategoryDTO) -> CategoryDTO:
         """Validates that user has a current category and returns it."""
         if user.current_category is None:
-            msg = "User has no current category assigned"
-            raise ValueError(msg)
+            raise NoCategoryError
         return user.current_category
 
     def _require_parent_category_id(self, user: UserWithCategoryDTO) -> int:
         """Validates that user has a current category with a parent and returns the parent_id."""
         category = self._require_category(user)
         if category.parent_id is None:
-            msg = "Current category must have a parent category"
-            raise ValueError(msg)
+            raise InvalidCategoryStructureError
         return category.parent_id
 
     async def _fetch_random_exercise(self, category_id: int, user_id: int) -> Exercise:
@@ -82,8 +85,7 @@ class BaseTaskProcessor(ABC, TaskProcessor):
 
     async def _process_answer_single_exercise(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises to check answer for"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         is_correct = user_answer == exercise.answer

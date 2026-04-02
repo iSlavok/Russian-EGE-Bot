@@ -1,5 +1,6 @@
 import random
 
+from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task2324Config, Task2324Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -57,8 +58,7 @@ class _Task2324BaseProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         task_config = Task2324Config.model_validate(user.current_task_config)

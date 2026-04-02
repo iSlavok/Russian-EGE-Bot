@@ -1,3 +1,4 @@
+from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task26Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -25,8 +26,7 @@ class Task26ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         user_clean = extract_digits(user_answer)

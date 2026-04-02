@@ -1,5 +1,6 @@
 import random
 
+from app.exceptions import MissingTaskConfigError, NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task15DrillContent, Task15ExamConfig, Task15ExamContent
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -51,8 +52,7 @@ class Task15DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         is_correct = user_answer == exercise.answer
@@ -118,11 +118,9 @@ class Task15ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         if user.current_task_config is None:
-            msg = "Task config is required for exam"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = Task15ExamConfig.model_validate(user.current_task_config)
         exercise = user.current_exercises[0]

@@ -1,5 +1,6 @@
 import html
 
+from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task1Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -38,8 +39,7 @@ class Task1DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises to check answer for"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         correct_answers = [ans.strip() for ans in exercise.answer.split(";")]

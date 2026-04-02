@@ -1,6 +1,7 @@
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions import UserNotFoundError
 from app.models import User
 from app.repositories import CategoryRepository, UserRepository
 from app.schemas import CategoryDTO, UserWithExercisesDTO
@@ -71,8 +72,7 @@ class UserService:
     async def select_category(self, user: UserWithCategoryDTO, category: CategoryDTO) -> None:
         db_user = await self._user_repository.get_by_id(user.id)
         if not db_user:
-            msg = f"User with ID {user.id} not found"
-            raise ValueError(msg)
+            raise UserNotFoundError(user.id)
         db_user.current_category_id = category.id
         await self._session.flush()
 

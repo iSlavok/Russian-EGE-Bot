@@ -1,7 +1,13 @@
 import html
 import random
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidExerciseCountError,
+    InvalidExerciseDataError,
+    MissingTaskConfigError,
+    NoCurrentExercisesError,
+    TaskForUserNotFoundError,
+)
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task7Content, Task7ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -33,8 +39,7 @@ class Task7DrillProcessor(BaseTaskProcessor):
         content = Task7Content.model_validate(exercise.content)
 
         if content.incorrect_answer is None:
-            msg = f"Exercise {exercise.id} has no incorrect_answer in content for Task 7"
-            raise ValueError(msg)
+            raise InvalidExerciseDataError(exercise.id, "no incorrect_answer in content")
 
         correct_phrase = content.phrase.format(word=exercise.answer.upper())
         incorrect_phrase = content.phrase.format(word=content.incorrect_answer.upper())
@@ -57,8 +62,7 @@ class Task7DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises to check answer for"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         is_correct = check_answer(
@@ -149,12 +153,10 @@ class Task7ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises or len(user.current_exercises) != EXAM_PHRASES_COUNT:
-            msg = "User must have exactly 5 current exercises for TASK_7_EXAM"
-            raise ValueError(msg)
+            raise InvalidExerciseCountError(EXAM_PHRASES_COUNT, len(user.current_exercises or []))
 
         if user.current_task_config is None:
-            msg = "Task config is required for TASK_7_EXAM"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = Task7ExamConfig.model_validate(user.current_task_config)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)

@@ -1,7 +1,7 @@
 import random
 import uuid
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import NoCurrentExercisesError, TaskForUserNotFoundError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas.task_22_schemas import (
     ALL_DEVICES,
@@ -58,8 +58,7 @@ class Task22DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         found_devices = set(exercise.answer.split(";"))
@@ -155,8 +154,7 @@ class Task22ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
 
         task_config = Task22ExamConfig.model_validate(user.current_task_config)
         exercises = self._get_ordered_exercises(user, task_config.exercise_ids)

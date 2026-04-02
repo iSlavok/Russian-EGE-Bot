@@ -3,6 +3,7 @@ from aiogram.types import CallbackQuery, Message
 from dishka import FromDishka
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions import NoCategoryError, NoHandlerTypeError
 from app.schemas import UserWithExercisesDTO
 from app.services.category_service import CategoryService
 from app.services.task_service import TaskService
@@ -57,11 +58,9 @@ async def get_task(
 
 async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, message_manager: MessageManager) -> int:
     if not user.current_category:
-        msg = "User does not have a current category set."
-        raise ValueError(msg)
+        raise NoCategoryError
     if not user.current_category.handler_type:
-        msg = "Current category does not have a handler type defined."
-        raise ValueError(msg)
+        raise NoHandlerTypeError
     task = await task_service.start_task(user)
     back_category_id = user.current_category.parent_id or 0
     keyboard = get_task_options_keyboard(
@@ -106,7 +105,7 @@ async def submit_answer_button(
 
 
 @router.message()
-async def sumit_answer(
+async def submit_answer(
         message: Message,
         user: UserWithExercisesDTO,
         message_manager: MessageManager,

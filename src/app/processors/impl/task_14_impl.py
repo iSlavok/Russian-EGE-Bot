@@ -1,7 +1,12 @@
 import random
 import uuid
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidExerciseCountError,
+    MissingTaskConfigError,
+    NoCurrentExercisesError,
+    TaskForUserNotFoundError,
+)
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task14DrillContent, Task14ExamConfig, Task14ExamContent
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -59,8 +64,7 @@ class Task14DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         is_correct = user_answer == exercise.answer
@@ -155,11 +159,9 @@ class Task14ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises or len(user.current_exercises) != EXAM_SENTENCES:
-            msg = f"User must have exactly {EXAM_SENTENCES} exercises for exam"
-            raise ValueError(msg)
+            raise InvalidExerciseCountError(EXAM_SENTENCES, len(user.current_exercises or []))
         if user.current_task_config is None:
-            msg = "Task config is required for exam"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = Task14ExamConfig.model_validate(user.current_task_config)
 

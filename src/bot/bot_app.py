@@ -10,7 +10,7 @@ from redis.asyncio.client import Redis
 
 from app.config import redis_settings, settings
 from bot.handlers import category_router, main_router, task_router
-from bot.middlewares import MessageManagerMiddleware, UserMiddleware
+from bot.middlewares import ErrorHandlerMiddleware, MessageManagerMiddleware, UserMiddleware
 
 
 async def start_bot(app_container: AsyncContainer) -> None:
@@ -30,8 +30,12 @@ async def start_bot(app_container: AsyncContainer) -> None:
     )
     dp = Dispatcher(storage=storage)
 
+    error_middleware = ErrorHandlerMiddleware()
     message_manager_middleware = MessageManagerMiddleware()
     user_middleware = UserMiddleware()
+
+    dp.message.middleware(error_middleware)
+    dp.callback_query.middleware(error_middleware)
 
     dp.message.middleware(message_manager_middleware)
     dp.callback_query.middleware(message_manager_middleware)

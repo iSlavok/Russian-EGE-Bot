@@ -3,7 +3,12 @@ import random
 import uuid
 from collections.abc import Sequence
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidExerciseCountError,
+    InvalidExerciseDataError,
+    MissingTaskConfigError,
+    TaskForUserNotFoundError,
+)
 from app.models import Exercise
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task5Content, Task5ExamConfig
@@ -56,8 +61,7 @@ class Task5DrillProcessor(BaseTaskProcessor):
             content = Task5Content.model_validate(exercise.content)
 
             if not exercise.answer.isdigit():
-                msg = f"Exercise answer must be a digit (exercise {exercise.id})"
-                raise ValueError(msg)
+                raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
             correct_answer_index = int(exercise.answer) - 1
             correct_word = content.paronyms[correct_answer_index].inflected_form
 
@@ -142,8 +146,7 @@ class Task5ExamProcessor(BaseTaskProcessor):
                 sentence = content.sentence.format(word=f"<b>{wrong_word.upper()}</b>")
             else:
                 if not exercise.answer.isdigit():
-                    msg = f"Exercise answer must be a digit (exercise {exercise.id})"
-                    raise ValueError(msg)
+                    raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
                 correct_answer_index = int(exercise.answer) - 1
                 correct_word = content.paronyms[correct_answer_index].inflected_form
                 sentence = content.sentence.format(word=f"<b>{correct_word.upper()}</b>")
@@ -173,12 +176,10 @@ class Task5ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises or len(user.current_exercises) != EXAM_SENTENCES_COUNT:
-            msg = "User must have exactly 5 current exercises for TASK_5_EXAM"
-            raise ValueError(msg)
+            raise InvalidExerciseCountError(EXAM_SENTENCES_COUNT, len(user.current_exercises or []))
 
         if user.current_task_config is None:
-            msg = "Task config is required for TASK_5_EXAM"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = Task5ExamConfig.model_validate(user.current_task_config)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
@@ -187,8 +188,7 @@ class Task5ExamProcessor(BaseTaskProcessor):
         wrong_exercise_content = Task5Content.model_validate(wrong_exercise.content)
 
         if not wrong_exercise.answer.isdigit():
-            msg = f"Exercise answer must be a digit (exercise {wrong_exercise.id})"
-            raise ValueError(msg)
+            raise InvalidExerciseDataError(wrong_exercise.id, "answer must be a digit")
         correct_answer_index = int(wrong_exercise.answer) - 1
 
         correct_word = wrong_exercise_content.paronyms[correct_answer_index].inflected_form

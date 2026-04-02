@@ -9,7 +9,7 @@ from app.services.task_service import TaskService
 from app.services.user_service import UserService
 from bot.callback_datas import CategoryCallbackData
 from bot.handlers.task_handler import send_new_task
-from bot.keyboards import get_back_keyboard, get_categories_keyboard
+from bot.keyboards import get_categories_keyboard
 from bot.services import MessageManager
 
 router = Router(name="exercise_router")
@@ -38,8 +38,6 @@ async def category_callback(
         user_service: FromDishka[UserService],
 ) -> None:
     category = await category_service.get_by_id_with_children(callback_data.category_id)
-    if not category:
-        await message_manager.edit_message(text="Категория не найдена", reply_markup=get_back_keyboard())
     if category.children:
         is_all_button = category.handler_type is not None
         await message_manager.edit_message(

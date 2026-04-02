@@ -1,6 +1,7 @@
 import html
 from typing import cast
 
+from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task3Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -47,8 +48,7 @@ class Task3ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises to check answer for"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
 
         exercise = user.current_exercises[0]
         content = Task3Content.model_validate(exercise.content)

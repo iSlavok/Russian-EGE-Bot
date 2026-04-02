@@ -2,7 +2,12 @@ import random
 import uuid
 from collections import defaultdict
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidExerciseCountError,
+    MissingTaskConfigError,
+    NoCurrentExercisesError,
+    TaskForUserNotFoundError,
+)
 from app.models import Exercise
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import TaskN9N12Content, TaskN9N12ExamConfig
@@ -162,8 +167,7 @@ class _BaseN9N12DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         is_correct = check_answer(
@@ -269,12 +273,10 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         total_expected = EXAM_ROWS * self.WORDS_PER_ROW
         if not user.current_exercises or len(user.current_exercises) != total_expected:
-            msg = f"User must have exactly {total_expected} current exercises for exam"
-            raise ValueError(msg)
+            raise InvalidExerciseCountError(total_expected, len(user.current_exercises or []))
 
         if user.current_task_config is None:
-            msg = "Task config is required for exam"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = TaskN9N12ExamConfig.model_validate(user.current_task_config)
         words_per_row = config.words_per_row

@@ -1,7 +1,12 @@
 import random
 import uuid
 
-from app.exceptions import TaskForUserNotFoundError
+from app.exceptions import (
+    InvalidExerciseCountError,
+    MissingTaskConfigError,
+    NoCurrentExercisesError,
+    TaskForUserNotFoundError,
+)
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task8Content, Task8ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -84,8 +89,7 @@ class Task8DrillProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises:
-            msg = "User has no current exercises to check answer for"
-            raise ValueError(msg)
+            raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         is_correct = user_answer == exercise.answer
@@ -180,12 +184,10 @@ class Task8ExamProcessor(BaseTaskProcessor):
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
         if not user.current_exercises or len(user.current_exercises) != EXAM_TOTAL_COUNT:
-            msg = f"User must have exactly {EXAM_TOTAL_COUNT} current exercises for TASK_8_EXAM"
-            raise ValueError(msg)
+            raise InvalidExerciseCountError(EXAM_TOTAL_COUNT, len(user.current_exercises or []))
 
         if user.current_task_config is None:
-            msg = "Task config is required for TASK_8_EXAM"
-            raise ValueError(msg)
+            raise MissingTaskConfigError
 
         config = Task8ExamConfig.model_validate(user.current_task_config)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)

@@ -1,4 +1,5 @@
 from app.enums import HandlerType
+from app.exceptions import ProcessorNotFoundError
 from app.processors.base_processor import TaskProcessor
 from app.processors.impl import (
     SkipProcessor,
@@ -100,8 +101,7 @@ class ProcessorFactory:
     def get_processor(self, handler_type: HandlerType) -> TaskProcessor:
         processor_cls = PROCESSOR_MAPPING.get(handler_type)
         if not processor_cls:
-            msg = f"Unsupported handler type: {handler_type}"
-            raise ValueError(msg)
+            raise ProcessorNotFoundError(str(handler_type))
 
         return processor_cls(
             exercise_repository=self._exercise_repository,

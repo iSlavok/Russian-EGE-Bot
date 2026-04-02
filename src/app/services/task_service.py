@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.exceptions import ExerciseNotFoundError, NoCategoryError, NoHandlerTypeError, UserNotFoundError
 from app.processors import ProcessorFactory
 from app.repositories import ExerciseRepository, UserRepository
 from app.schemas import CheckResult, TaskUI, UserWithExercisesDTO
@@ -19,18 +20,15 @@ class TaskService:
 
     async def start_task(self, user: UserWithCategoryDTO) -> TaskUI:
         if not user.current_category:
-            msg = "User does not have a current category set."
-            raise ValueError(msg)
+            raise NoCategoryError
         if not user.current_category.handler_type:
-            msg = "Current category does not have a handler type defined."
-            raise ValueError(msg)
+            raise NoHandlerTypeError
         processor = self._processor_factory.get_processor(user.current_category.handler_type)
         task_response = await processor.create_task(user)
 
         db_user = await self._user_repository.get_by_id_with_exercises(user.id)
         if not db_user:
-            msg = "User not found."
-            raise ValueError(msg)
+            raise UserNotFoundError(user.id)
         exercise_ids = [task_response.exercise_ids] \
             if isinstance(task_response.exercise_ids, int) \
             else task_response.exercise_ids
@@ -38,8 +36,7 @@ class TaskService:
         for exercise_id in exercise_ids:
             exercise = await self._exercise_repository.get_by_id(exercise_id)
             if not exercise:
-                msg = f"Exercise with ID {exercise_id} not found."
-                raise ValueError(msg)
+                raise ExerciseNotFoundError(exercise_id)
             exercises.append(exercise)
         now = datetime.now(UTC)
         db_user.current_exercises = exercises
@@ -55,10 +52,8 @@ class TaskService:
             user_answer: str,
     ) -> CheckResult:
         if not user.current_category:
-            msg = "User does not have a current category set."
-            raise ValueError(msg)
+            raise NoCategoryError
         if not user.current_category.handler_type:
-            msg = "Current category does not have a handler type defined."
-            raise ValueError(msg)
+            raise NoHandlerTypeError
         processor = self._processor_factory.get_processor(user.current_category.handler_type)
         return await processor.process_answer(user, user_answer)
