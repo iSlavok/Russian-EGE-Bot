@@ -70,12 +70,9 @@ services:
       TEST_DATABASE_URL: "postgresql+asyncpg://test:test@postgres-test:5432/test_db"
     volumes:
       - ./coverage:/src/coverage
-      - ./src/bot:/src/bot
-      - ./src/app:/src/app
-      - ./src/main.py:/src/main.py
-      - ./migrations:/src/migrations
-      - ./alembic.ini:/src/alembic.ini
+      - ./src:/src/src
       - ./tests:/src/tests
+      - ./pyproject.toml:/src/pyproject.toml
     networks: [ bot_network ]
 
   postgres:

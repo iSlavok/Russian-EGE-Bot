@@ -14,4 +14,4 @@ RUN uv sync --frozen --no-install-project --no-dev --group test
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-CMD ["pytest", "tests/", "-v", "--cov=app", "--cov-report=term", "--cov-report=html:coverage/htmlcov", "--cov-report=xml:coverage/coverage.xml"]
+CMD ["pytest", "tests/", "-v"]
