@@ -306,9 +306,4 @@ class ExerciseSelector:
         scored = self._compute_thompson_scores(stats_rows, exclude_ids)
         top_ids = [eid for eid, _ in scored[:limit]]
 
-        exercises = []
-        for eid in top_ids:
-            ex = await self._exercise_repository.get_by_id(eid)
-            if ex:
-                exercises.append(ex)
-        return exercises
+        return await self._exercise_repository.get_by_ids(top_ids)
