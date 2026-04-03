@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.database.base_model import BaseDBModel
 from app.models import Category, Exercise, User, UserAnswer
+from app.processors import ProcessorFactory
 from app.repositories import CategoryRepository, ExerciseRepository, UserAnswerRepository, UserRepository
 from app.services.exercise_selector import ExerciseSelector
 
@@ -86,6 +87,15 @@ def user_answer_repository(db_session):
 @pytest.fixture
 def exercise_selector(exercise_repository, user_answer_repository):
     return ExerciseSelector(exercise_repository, user_answer_repository)
+
+
+@pytest.fixture
+def processor_factory(exercise_repository, user_answer_repository, exercise_selector):
+    return ProcessorFactory(
+        exercise_repository=exercise_repository,
+        answer_repository=user_answer_repository,
+        exercise_selector=exercise_selector,
+    )
 
 
 # ---------------------------------------------------------------------------

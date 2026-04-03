@@ -815,3 +815,86 @@ class TestConvenienceWrappers:
         )
 
         assert len(result) == 1
+
+
+# ===================================================================
+# select_by_answer_and_content  (line 110)
+# ===================================================================
+
+class TestSelectByAnswerAndContent:
+    async def test_filters_by_answer_and_content(
+        self, exercise_selector, user_factory, category_factory, exercise_factory,
+    ):
+        user = await user_factory()
+        cat = await category_factory()
+        await exercise_factory(category_id=cat.id, answer="yes", content={"type": "drag"})
+        await exercise_factory(category_id=cat.id, answer="no", content={"type": "drag"})
+        await exercise_factory(category_id=cat.id, answer="yes", content={"type": "input"})
+
+        result = await exercise_selector.select_by_answer_and_content(
+            cat.id, user.id, "yes", "type", "drag", limit=10,
+        )
+
+        assert len(result) == 1
+        assert result[0].answer == "yes"
+        assert result[0].content["type"] == "drag"
+
+    async def test_no_match_returns_empty(
+        self, exercise_selector, user_factory, category_factory, exercise_factory,
+    ):
+        user = await user_factory()
+        cat = await category_factory()
+        await exercise_factory(category_id=cat.id, answer="no", content={"type": "input"})
+
+        result = await exercise_selector.select_by_answer_and_content(
+            cat.id, user.id, "yes", "type", "drag", limit=10,
+        )
+
+        assert len(result) == 0
+
+
+# ===================================================================
+# select_smart_same_answer_groups edge cases (lines 136, 158)
+# ===================================================================
+
+class TestSelectSmartSameAnswerGroupsEdgeCases:
+    async def test_all_answers_too_small_returns_empty(
+        self, exercise_selector, user_factory, category_factory, exercise_factory, user_answer_factory,
+    ):
+        """All answers have fewer exercises than group_size -> empty (line 136 or 158)."""
+        user = await user_factory()
+        cat = await category_factory()
+        # Only 1 exercise per answer, but group_size=3
+        ex = await exercise_factory(category_id=cat.id, answer="A")
+        await user_answer_factory(user.id, ex.id, cat.id)
+
+        result = await exercise_selector.select_smart_same_answer_groups(
+            cat.id, user.id, group_size=3, num_groups=1,
+        )
+
+        assert result == []
+
+    async def test_partial_group_skipped(
+        self, exercise_selector, user_factory, category_factory, exercise_factory, user_answer_factory,
+    ):
+        """One answer has enough, another doesn't -> partial group skipped (line 158)."""
+        user = await user_factory()
+        cat = await category_factory()
+
+        # Answer "A": 3 exercises (enough for group_size=3)
+        for _ in range(3):
+            ex = await exercise_factory(category_id=cat.id, answer="A")
+            await user_answer_factory(user.id, ex.id, cat.id)
+
+        # Answer "B": 1 exercise (not enough for group_size=3)
+        ex_b = await exercise_factory(category_id=cat.id, answer="B")
+        await user_answer_factory(user.id, ex_b.id, cat.id)
+
+        result = await exercise_selector.select_smart_same_answer_groups(
+            cat.id, user.id, group_size=3, num_groups=2,
+        )
+
+        # At most 1 full group (from "A"), "B" doesn't have enough
+        assert len(result) <= 1
+        for group in result:
+            assert len(group) == 3
