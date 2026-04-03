@@ -26,6 +26,11 @@ dev = [
     "ruff>=0.14.3",
     "setuptools>=82.0.0",
 ]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+]
 
 [tool.ruff]
 output-format = "concise"
@@ -51,6 +56,31 @@ ignore = [
     "S311",
 ]
 extend-per-file-ignores = { "migrations/versions/*" = ["INP001"] }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["src/app"]
+data_file = "coverage/.coverage"
+
+[tool.coverage.report]
+show_missing = true
+precision = 2
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "pragma: no cover",
+]
+
+[tool.coverage.html]
+directory = "coverage/htmlcov"
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"
 
 [tool.pyright]
 pythonVersion = "3.13"

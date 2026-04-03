@@ -1,4 +1,4 @@
-from app.exceptions import NoCurrentExercisesError
+from app.exceptions import NoCurrentExercisesError, TaskForUserNotFoundError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas.task_21_schemas import (
     Task21ColonRule,
@@ -93,7 +93,7 @@ class Task21DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
-        exercise = await self._fetch_random_exercise(category.id, user.id)
+        exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task21DrillContent.model_validate(exercise.content)
         rule_names = _RULE_NAMES_BY_TYPE[content.task_type]
@@ -142,7 +142,12 @@ class Task21ExamProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
-        exercise = await self._fetch_random_exercise(category.id, user.id)
+        exercises = await self._exercise_selector.select_smart_by_group(
+            category_id=category.id, user_id=user.id, limit=1,
+        )
+        if not exercises:
+            raise TaskForUserNotFoundError(user.id)
+        exercise = exercises[0]
 
         content = Task21ExamContent.model_validate(exercise.content)
         task_text = f"{_EXAM_FORMULATION[content.task_type]}\n\n<i>{content.full_text}</i>"

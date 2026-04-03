@@ -9,6 +9,7 @@ from app.exceptions import (
 )
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task8Content, Task8ExamConfig
+from app.repositories.exercise_filters import answer_ne
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import extract_digits
@@ -58,9 +59,10 @@ class Task8DrillProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
 
-        exercises = await self._exercise_repository.get_random_with_content_filter(
+        exercises = await self._exercise_selector.select_by_content_field(
             category_id=parent_id,
-            content_field="corrected_sentence",
+            user_id=user.id,
+            field="corrected_sentence",
             limit=1,
         )
         if not exercises:
@@ -130,16 +132,18 @@ class Task8ExamProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
 
-        error_exercises = list(await self._exercise_repository.get_random_with_distinct_answer(
+        error_exercises = list(await self._exercise_selector.select_smart_distinct_answer(
             category_id=parent_id,
-            exclude_answer=NO_ERROR_ANSWER,
+            user_id=user.id,
             limit=EXAM_ERROR_COUNT,
+            filters=[answer_ne(NO_ERROR_ANSWER)],
         ))
         if len(error_exercises) < EXAM_ERROR_COUNT:
             raise TaskForUserNotFoundError(user.id)
 
-        correct_exercises = list(await self._exercise_repository.get_random_by_answer(
+        correct_exercises = list(await self._exercise_selector.select_by_answer(
             category_id=parent_id,
+            user_id=user.id,
             answer=NO_ERROR_ANSWER,
             limit=EXAM_CORRECT_COUNT,
         ))

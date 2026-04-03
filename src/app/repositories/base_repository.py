@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import BaseDBModel
@@ -36,6 +37,13 @@ class BaseRepository[ModelType: BaseDBModel]:
     async def flush(self, db_objects: Sequence[ModelType] | ModelType | None = None) -> None:
         db_objects_seq = [db_objects] if db_objects is not None and not isinstance(db_objects, Sequence) else db_objects
         await self.session.flush(db_objects_seq)
+
+    async def get_by_ids(self, ids: Sequence[int]) -> Sequence[ModelType]:
+        if not ids:
+            return []
+        stmt = select(self.model).where(self.model.id.in_(ids))
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
 
     async def commit(self) -> None:
         await self.session.commit()

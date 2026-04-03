@@ -143,7 +143,7 @@ class _BaseN9N12DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_random_exercise(parent_id, user.id)
+        exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = TaskN9N12Content.model_validate(exercise.content)
 
@@ -206,28 +206,19 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
         correct_count = random.choices([2, 3, 4], weights=CORRECT_COUNT_WEIGHTS)[0]
         wrong_count = EXAM_ROWS - correct_count
 
-        correct_exercises = list(
-            await self._exercise_repository.get_random_same_answer_groups(
-                category_id=parent_id,
-                group_size=wpr,
-                num_groups=correct_count,
-            ),
+        correct_rows = await self._exercise_selector.select_smart_same_answer_groups(
+            category_id=parent_id,
+            user_id=user.id,
+            group_size=wpr,
+            num_groups=correct_count,
         )
 
-        if len(correct_exercises) < correct_count * wpr:
+        if len(correct_rows) < correct_count:
             raise TaskForUserNotFoundError(user.id)
 
-        rows_by_answer: dict[str, list[Exercise]] = defaultdict(list)
-        for ex in correct_exercises:
-            rows_by_answer[ex.answer].append(ex)
-        correct_rows = list(rows_by_answer.values())
+        used_ids = {e.id for row in correct_rows for e in row}
 
-        used_ids = {e.id for e in correct_exercises}
-
-        wrong_pool = list(await self._exercise_repository.get_random(
-            category_id=parent_id,
-            limit=wrong_count * wpr * 3,
-        ))
+        wrong_pool = list(await self._fetch_exercises(parent_id, user.id, wrong_count * wpr * 5))
         remaining = [ex for ex in wrong_pool if ex.id not in used_ids]
 
         wrong_rows = _build_wrong_rows(wrong_count, wpr, remaining)

@@ -1,6 +1,6 @@
 import random
 
-from app.exceptions import MissingTaskConfigError, NoCurrentExercisesError
+from app.exceptions import MissingTaskConfigError, NoCurrentExercisesError, TaskForUserNotFoundError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task15DrillContent, Task15ExamConfig, Task15ExamContent
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -27,7 +27,7 @@ class Task15DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
-        exercise = await self._fetch_random_exercise(category.id, user.id)
+        exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task15DrillContent.model_validate(exercise.content)
 
@@ -94,7 +94,12 @@ class Task15ExamProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
-        exercise = await self._fetch_random_exercise(category.id, user.id)
+        exercises = await self._exercise_selector.select_smart_by_group(
+            category_id=category.id, user_id=user.id, limit=1,
+        )
+        if not exercises:
+            raise TaskForUserNotFoundError(user.id)
+        exercise = exercises[0]
 
         content = Task15ExamContent.model_validate(exercise.content)
 

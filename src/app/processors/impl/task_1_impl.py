@@ -24,7 +24,7 @@ class Task1DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
-        exercise = await self._fetch_random_exercise(category.id, user.id)
+        exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task1Content.model_validate(exercise.content)
 

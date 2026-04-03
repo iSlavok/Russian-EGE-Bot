@@ -7,6 +7,7 @@ from app.database import get_session
 from app.processors import ProcessorFactory
 from app.repositories import CategoryRepository, ExerciseRepository, UserAnswerRepository, UserRepository
 from app.services.category_service import CategoryService
+from app.services.exercise_selector import ExerciseSelector
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
 
@@ -24,6 +25,7 @@ class AppProvider(Provider):
     user_repository = provide(UserRepository)
     user_answer_repository = provide(UserAnswerRepository)
 
+    exercise_selector = provide(ExerciseSelector)
     processor_factory = provide(ProcessorFactory)
 
     user_service = provide(UserService)

@@ -28,7 +28,7 @@ class Task5DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_random_exercise(parent_id, user.id)
+        exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task5Content.model_validate(exercise.content)
 
@@ -124,11 +124,7 @@ class Task5ExamProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-
-        exercises_pool = await self._exercise_repository.get_random(
-            category_id=parent_id,
-            limit=EXAM_INITIAL_POOL_SIZE,
-        )
+        exercises_pool = await self._fetch_exercises(parent_id, user.id, EXAM_INITIAL_POOL_SIZE)
 
         exercises = self._select_exercises_without_word_overlap(exercises_pool, EXAM_SENTENCES_COUNT)
 

@@ -28,7 +28,7 @@ class Task16DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_random_exercise(parent_id, user.id)
+        exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task16Content.model_validate(exercise.content)
 
@@ -86,14 +86,16 @@ class Task16ExamProcessor(BaseTaskProcessor):
         correct_count = random.choices([2, 3, 4], weights=CORRECT_COUNT_WEIGHTS)[0]
         wrong_count = EXAM_SENTENCES - correct_count
 
-        correct_exs = list(await self._exercise_repository.get_random_by_answer(
+        correct_exs = list(await self._exercise_selector.select_by_answer(
             category_id=parent_id,
+            user_id=user.id,
             answer=_ANSWER_ONE,
             limit=correct_count,
         ))
-        wrong_exs = list(await self._exercise_repository.get_random_excluding_answer(
+        wrong_exs = list(await self._exercise_selector.select_excluding_answer(
             category_id=parent_id,
-            exclude_answer=_ANSWER_ONE,
+            user_id=user.id,
+            exclude=_ANSWER_ONE,
             limit=wrong_count,
         ))
 

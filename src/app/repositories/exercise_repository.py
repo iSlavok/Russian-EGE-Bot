@@ -1,9 +1,9 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
-from sqlalchemy import String, func, select, text
+from sqlalchemy import String, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Exercise
+from app.models import Exercise, UserAnswer
 from app.repositories import BaseRepository
 
 
@@ -11,214 +11,105 @@ class ExerciseRepository(BaseRepository[Exercise]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Exercise)
 
-    async def get_random_exercise(self) -> Exercise | None:
-        statement = (
-            select(Exercise)
-            .order_by(func.random())
-            .limit(1)
-        )
-        result = await self.session.execute(statement)
-        return result.scalar_one_or_none()
-
-    async def get_exercise_by_categories(self, category_ids: Iterable[int]) -> Exercise | None:
-        statement = (
-            select(Exercise)
-            .where(Exercise.category_id.in_(category_ids))
-            .order_by(func.random())
-            .limit(1)
-        )
-        result = await self.session.execute(statement)
-        return result.scalar_one_or_none()
-
-    async def get_random(self, category_id: int, limit: int) -> Sequence[Exercise]:
-        statement = (
-            select(Exercise)
-            .where(Exercise.category_id == category_id)
-            .order_by(func.random())
-            .limit(limit)
-        )
-        result = await self.session.execute(statement)
-        return result.scalars().all()
-
-    async def get_random_with_content_filter(
-        self, category_id: int, content_field: str, limit: int,
+    async def get_random_unseen(
+            self,
+            category_id: int,
+            user_id: int,
+            limit: int,
+            filters: list | None = None,
+            *, distinct_on_answer: bool = False,
     ) -> Sequence[Exercise]:
-        """Получает случайные упражнения, где content->>content_field IS NOT NULL."""
+        """Возвращает случайные активные упражнения, которые юзер ещё не решал.
+
+        Пустой результат означает, что все задачи в категории решены хотя бы раз.
+        Если distinct_on_answer=True — DISTINCT ON (answer), по 1 случайному unseen на тип.
+        """
+        answered_sq = (
+            select(UserAnswer.exercise_id)
+            .where(
+                UserAnswer.user_id == user_id,
+                UserAnswer.category_id == category_id,
+            )
+            .distinct()
+            .subquery()
+        )
         statement = (
             select(Exercise)
             .where(
                 Exercise.category_id == category_id,
-                Exercise.content[content_field].as_string().isnot(None),
+                Exercise.is_active.is_(True),
+                Exercise.id.notin_(select(answered_sq.c.exercise_id)),
             )
-            .order_by(func.random())
-            .limit(limit)
         )
+        if filters:
+            statement = statement.where(*filters)
+        if distinct_on_answer:
+            statement = statement.distinct(Exercise.answer).order_by(Exercise.answer, func.random())
+        else:
+            statement = statement.order_by(func.random())
+        statement = statement.limit(limit)
         result = await self.session.execute(statement)
         return result.scalars().all()
 
-    async def get_random_distinct_group(
+    async def get_random_distinct_group_filler(
         self,
         category_id: int,
         limit: int,
-        require_one_with_content_field: str | None = None,
+        exclude_ids: list[int] | None = None,
+        exclude_group_ids: list | None = None,
     ) -> Sequence[Exercise]:
-        """Получает случайные упражнения с уникальными group_id.
-
-        NULL group_id считаются уникальными (каждый NULL — отдельная группа).
-        Если require_one_with_content_field задан, гарантирует что хотя бы одно
-        упражнение имеет это поле в content не null.
-        """
+        """Получает случайные упражнения с уникальными group_id, исключая указанные ID и группы."""
         distinct_group = func.coalesce(
             Exercise.group_id.cast(String),
             func.gen_random_uuid().cast(String),
         )
 
-        base_query = (
+        query = (
             select(Exercise)
             .where(Exercise.category_id == category_id)
             .distinct(distinct_group)
             .order_by(distinct_group, func.random())
-        )
-
-        if require_one_with_content_field is None:
-            statement = base_query.limit(limit)
-            result = await self.session.execute(statement)
-            return result.scalars().all()
-
-        required_query = (
-            select(Exercise)
-            .where(
-                Exercise.category_id == category_id,
-                Exercise.content[require_one_with_content_field].as_string().isnot(None),
-            )
-            .order_by(func.random())
-            .limit(1)
-        )
-        required_result = await self.session.execute(required_query)
-        required_exercise = required_result.scalar_one_or_none()
-        if required_exercise is None:
-            return []
-
-        exclude_groups = []
-        if required_exercise.group_id is not None:
-            exclude_groups.append(required_exercise.group_id)
-
-        rest_query = (
-            select(Exercise)
-            .where(
-                Exercise.category_id == category_id,
-                Exercise.id != required_exercise.id,
-            )
-            .distinct(distinct_group)
-            .order_by(distinct_group, func.random())
-            .limit(limit - 1)
-        )
-
-        if exclude_groups:
-            rest_query = rest_query.where(
-                (Exercise.group_id.is_(None)) | (~Exercise.group_id.in_(exclude_groups)),
-            )
-
-        rest_result = await self.session.execute(rest_query)
-        rest_exercises = list(rest_result.scalars().all())
-
-        return [required_exercise, *rest_exercises]
-
-    async def get_random_excluding_answer(
-        self, category_id: int, exclude_answer: str, limit: int,
-    ) -> Sequence[Exercise]:
-        """Получает случайные упражнения где answer != exclude_answer."""
-        statement = (
-            select(Exercise)
-            .where(Exercise.category_id == category_id, Exercise.answer != exclude_answer)
-            .order_by(func.random())
             .limit(limit)
         )
-        result = await self.session.execute(statement)
-        return result.scalars().all()
 
-    async def get_random_with_distinct_answer(
-        self, category_id: int, exclude_answer: str, limit: int,
-    ) -> Sequence[Exercise]:
-        """Получает случайные упражнения с уникальными значениями answer, исключая указанное."""
-        statement = (
-            select(Exercise)
-            .where(Exercise.category_id == category_id, Exercise.answer != exclude_answer)
-            .distinct(Exercise.answer)
-            .order_by(Exercise.answer, func.random())
-            .limit(limit)
-        )
-        result = await self.session.execute(statement)
-        return result.scalars().all()
+        if exclude_ids:
+            query = query.where(Exercise.id.notin_(exclude_ids))
 
-    async def get_random_by_answer(
-        self, category_id: int, answer: str, limit: int,
-    ) -> Sequence[Exercise]:
-        """Получает случайные упражнения с конкретным значением answer."""
-        statement = (
-            select(Exercise)
-            .where(Exercise.category_id == category_id, Exercise.answer == answer)
-            .order_by(func.random())
-            .limit(limit)
-        )
-        result = await self.session.execute(statement)
-        return result.scalars().all()
-
-    async def get_random_by_content_value(
-        self, category_id: int, content_field: str, content_value: str, limit: int,
-    ) -> Sequence[Exercise]:
-        """Получает случайные упражнения, где content->>content_field == content_value."""
-        statement = (
-            select(Exercise)
-            .where(
-                Exercise.category_id == category_id,
-                Exercise.content[content_field].as_string() == content_value,
+        if exclude_group_ids:
+            query = query.where(
+                (Exercise.group_id.is_(None)) | (~Exercise.group_id.in_(exclude_group_ids)),
             )
-            .order_by(func.random())
-            .limit(limit)
-        )
-        result = await self.session.execute(statement)
+
+        result = await self.session.execute(query)
         return result.scalars().all()
 
-    async def get_random_by_answer_and_content_value(
-        self,
-        category_id: int,
-        answer: str,
-        content_field: str,
-        content_value: str,
-        limit: int,
-    ) -> Sequence[Exercise]:
-        """Получает случайные упражнения с заданным answer и content->>content_field == content_value."""
-        statement = (
-            select(Exercise)
-            .where(
-                Exercise.category_id == category_id,
-                Exercise.answer == answer,
-                Exercise.content[content_field].as_string() == content_value,
-            )
-            .order_by(func.random())
-            .limit(limit)
-        )
-        result = await self.session.execute(statement)
-        return result.scalars().all()
-
-    async def get_exam_22_exercises(self, category_id: int) -> Sequence[Exercise]:
+    async def get_exam_22_exercises(self, category_id: int, user_id: int) -> Sequence[Exercise]:
         """Возвращает 5 совместимых упражнений для exam-режима задания 22.
 
         Использует рекурсивный CTE, который гарантирует:
         - ответы (found_devices) 5 предложений взаимно не пересекаются с present-устройствами других
         - other_devices никогда не попадут в варианты ответа
         - суммарное число distinct present-устройств <= 19, то есть хватит 4 дистракторов из 23
+
+        Unseen exercises приоритизируются через ORDER BY is_seen, random().
         """
         sql = text("""
-            WITH RECURSIVE base_data AS (
+            WITH RECURSIVE
+            answered AS (
+                SELECT DISTINCT exercise_id
+                FROM user_answers
+                WHERE user_id = :user_id AND category_id = :category_id
+            ),
+            base_data AS (
                 SELECT
-                    id,
-                    string_to_array(answer, ';') AS a_arr,
-                    (string_to_array(answer, ';') ||
-                     COALESCE(ARRAY(SELECT jsonb_array_elements_text(content->'other_devices')), '{}')) AS p_arr
-                FROM exercises
-                WHERE category_id = :category_id AND is_active = true
+                    e.id,
+                    string_to_array(e.answer, ';') AS a_arr,
+                    (string_to_array(e.answer, ';') ||
+                     COALESCE(ARRAY(SELECT jsonb_array_elements_text(e.content->'other_devices')), '{}')) AS p_arr,
+                    CASE WHEN a.exercise_id IS NULL THEN 0 ELSE 1 END AS is_seen
+                FROM exercises e
+                LEFT JOIN answered a ON e.id = a.exercise_id
+                WHERE e.category_id = :category_id AND e.is_active = true
             ),
             exam_path AS (
                 SELECT * FROM (
@@ -228,7 +119,7 @@ class ExerciseRepository(BaseRepository[Exercise]):
                         p_arr AS c_p,
                         1 AS depth
                     FROM base_data
-                    ORDER BY random()
+                    ORDER BY is_seen, random()
                     LIMIT 20
                 ) AS initial_step
                 UNION ALL
@@ -244,7 +135,7 @@ class ExerciseRepository(BaseRepository[Exercise]):
                     WHERE NOT (b.id = ANY(ep.ids))
                       AND NOT (b.a_arr && ep.c_p)
                       AND NOT (b.p_arr && ep.c_a)
-                    ORDER BY random()
+                    ORDER BY b.is_seen, random()
                     LIMIT 1
                 ) bd
                 WHERE ep.depth < 5
@@ -258,46 +149,140 @@ class ExerciseRepository(BaseRepository[Exercise]):
             ) chosen
             JOIN exercises e ON e.id = ANY(chosen.ids)
         """)
-        stmt = select(Exercise).from_statement(sql.bindparams(category_id=category_id))
+        stmt = select(Exercise).from_statement(sql.bindparams(category_id=category_id, user_id=user_id))
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_random_same_answer_groups(
+    async def get_random_unseen_by_group(
         self,
         category_id: int,
-        group_size: int,
-        num_groups: int,
-        exclude_ids: list[int] | None = None,
+        user_id: int,
+        limit: int,
+        filters: list | None = None,
     ) -> Sequence[Exercise]:
-        """Получает num_groups групп по group_size упражнений с одинаковым answer в каждой.
+        """One random exercise per unseen group from target category.
 
-        Каждая группа — случайный answer, в котором достаточно упражнений.
-        Возвращает плоский список; группировка по answer на стороне вызывающего.
-        Один SQL-запрос (CTE + window function).
+        Cross-category unseen check: a group is "seen" if the user answered
+        ANY exercise with that group_id (even from a different category).
+        Exercises with NULL group_id fall back to per-exercise unseen check.
         """
-        base_filter = [Exercise.category_id == category_id]
-        if exclude_ids:
-            base_filter.append(Exercise.id.notin_(exclude_ids))
+        seen_groups_sq = (
+            select(Exercise.group_id)
+            .join(UserAnswer, UserAnswer.exercise_id == Exercise.id)
+            .where(
+                UserAnswer.user_id == user_id,
+                Exercise.group_id.isnot(None),
+            )
+            .distinct()
+            .subquery()
+        )
 
-        eligible_sq = (
-            select(Exercise.answer)
-            .where(*base_filter)
-            .group_by(Exercise.answer)
-            .having(func.count() >= group_size)
-            .order_by(func.random())
-            .limit(num_groups)
-        ).subquery()
+        seen_exercises_sq = (
+            select(UserAnswer.exercise_id)
+            .where(UserAnswer.user_id == user_id)
+            .distinct()
+            .subquery()
+        )
+
+        distinct_group = func.coalesce(
+            Exercise.group_id.cast(String),
+            func.gen_random_uuid().cast(String),
+        )
+
+        statement = (
+            select(Exercise)
+            .outerjoin(seen_groups_sq, Exercise.group_id == seen_groups_sq.c.group_id)
+            .outerjoin(seen_exercises_sq, Exercise.id == seen_exercises_sq.c.exercise_id)
+            .where(
+                Exercise.category_id == category_id,
+                Exercise.is_active.is_(True),
+                or_(
+                    Exercise.group_id.isnot(None) & seen_groups_sq.c.group_id.is_(None),
+                    Exercise.group_id.is_(None) & seen_exercises_sq.c.exercise_id.is_(None),
+                ),
+            )
+        )
+        if filters:
+            statement = statement.where(*filters)
+        statement = (
+            statement
+            .distinct(distinct_group)
+            .order_by(distinct_group, func.random())
+            .limit(limit)
+        )
+
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def get_random_by_group_ids(
+        self,
+        category_id: int,
+        group_ids: Sequence,
+        exclude_ids: set[int] | None = None,
+        filters: list | None = None,
+    ) -> Sequence[Exercise]:
+        """One random exercise per group_id from target category."""
+        if not group_ids:
+            return []
+
+        statement = (
+            select(Exercise)
+            .where(
+                Exercise.category_id == category_id,
+                Exercise.is_active.is_(True),
+                Exercise.group_id.in_(group_ids),
+            )
+            .distinct(Exercise.group_id)
+            .order_by(Exercise.group_id, func.random())
+        )
+        if exclude_ids:
+            statement = statement.where(Exercise.id.notin_(exclude_ids))
+        if filters:
+            statement = statement.where(*filters)
+
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def get_exercises_by_answers_unseen_first(
+        self,
+        category_id: int,
+        user_id: int,
+        answers: set[str],
+        per_answer_limit: int,
+        exclude_ids: set[int] | None = None,
+    ) -> Sequence[Exercise]:
+        """Batch fetch exercises for multiple answers, unseen first. One SQL query.
+
+        Returns up to per_answer_limit exercises per answer,
+        with unseen exercises prioritized over seen ones.
+        """
+        if not answers:
+            return []
+
+        answered_sq = (
+            select(UserAnswer.exercise_id)
+            .where(UserAnswer.user_id == user_id, UserAnswer.category_id == category_id)
+            .distinct()
+            .subquery()
+        )
+
+        is_seen = case(
+            (answered_sq.c.exercise_id.is_(None), 0),
+            else_=1,
+        )
 
         rn = func.row_number().over(
             partition_by=Exercise.answer,
-            order_by=func.random(),
+            order_by=(is_seen, func.random()),
         ).label("rn")
 
         inner = (
             select(Exercise.id, rn)
+            .outerjoin(answered_sq, Exercise.id == answered_sq.c.exercise_id)
             .where(
                 Exercise.category_id == category_id,
-                Exercise.answer.in_(select(eligible_sq.c.answer)),
+                Exercise.is_active.is_(True),
+                Exercise.answer.in_(answers),
             )
         )
         if exclude_ids:
@@ -307,7 +292,7 @@ class ExerciseRepository(BaseRepository[Exercise]):
         statement = (
             select(Exercise)
             .join(inner_sq, Exercise.id == inner_sq.c.id)
-            .where(inner_sq.c.rn <= group_size)
+            .where(inner_sq.c.rn <= per_answer_limit)
         )
 
         result = await self.session.execute(statement)

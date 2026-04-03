@@ -1,5 +1,6 @@
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from app.exceptions import (
@@ -13,12 +14,19 @@ from app.processors.interface import TaskProcessor
 from app.repositories import ExerciseRepository, UserAnswerRepository
 from app.schemas import CategoryDTO, CheckResult, ExerciseDTO, TaskResponse, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.services.exercise_selector import ExerciseSelector
 
 
 class BaseTaskProcessor(ABC, TaskProcessor):
-    def __init__(self, exercise_repository: ExerciseRepository, answer_repository: UserAnswerRepository) -> None:
+    def __init__(
+        self,
+        exercise_repository: ExerciseRepository,
+        answer_repository: UserAnswerRepository,
+        exercise_selector: ExerciseSelector,
+    ) -> None:
         self._exercise_repository = exercise_repository
         self._answer_repository = answer_repository
+        self._exercise_selector = exercise_selector
 
     @abstractmethod
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
@@ -42,12 +50,26 @@ class BaseTaskProcessor(ABC, TaskProcessor):
             raise InvalidCategoryStructureError
         return category.parent_id
 
-    async def _fetch_random_exercise(self, category_id: int, user_id: int) -> Exercise:
-        """Fetches one random exercise from the given category or raises TaskForUserNotFoundError."""
-        exercises = await self._exercise_repository.get_random(category_id=category_id, limit=1)
+    async def _fetch_exercise(self, category_id: int, user_id: int) -> Exercise:
+        """Fetches one exercise using smart selection or raises TaskForUserNotFoundError."""
+        exercises = await self._exercise_selector.select_smart(
+            category_id=category_id,
+            user_id=user_id,
+            limit=1,
+        )
         if not exercises:
             raise TaskForUserNotFoundError(user_id)
         return exercises[0]
+
+    async def _fetch_exercises(self, category_id: int, user_id: int, count: int) -> Sequence[Exercise]:
+        exercises = await self._exercise_selector.select_smart(
+            category_id=category_id,
+            user_id=user_id,
+            limit=count,
+        )
+        if len(exercises) < count:
+            raise TaskForUserNotFoundError(user_id)
+        return exercises
 
     @staticmethod
     def _compute_solve_time(user: UserWithExercisesDTO) -> int:

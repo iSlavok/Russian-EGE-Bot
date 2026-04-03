@@ -27,9 +27,10 @@ class Task7DrillProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
 
-        exercises = await self._exercise_repository.get_random_with_content_filter(
+        exercises = await self._exercise_selector.select_by_content_field(
             category_id=parent_id,
-            content_field="incorrect_answer",
+            user_id=user.id,
+            field="incorrect_answer",
             limit=1,
         )
         if not exercises:
@@ -104,20 +105,28 @@ class Task7ExamProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
 
-        exercises = await self._exercise_repository.get_random_distinct_group(
+        wrong_exercises = await self._exercise_selector.select_by_content_field(
             category_id=parent_id,
-            limit=EXAM_PHRASES_COUNT,
-            require_one_with_content_field="incorrect_answer",
+            user_id=user.id,
+            field="incorrect_answer",
+            limit=1,
         )
+        if not wrong_exercises:
+            raise TaskForUserNotFoundError(user.id)
+        wrong_exercise = wrong_exercises[0]
 
-        if len(exercises) < EXAM_PHRASES_COUNT:
+        filler = await self._exercise_repository.get_random_distinct_group_filler(
+            category_id=parent_id,
+            limit=EXAM_PHRASES_COUNT - 1,
+            exclude_ids=[wrong_exercise.id],
+            exclude_group_ids=[wrong_exercise.group_id] if wrong_exercise.group_id else None,
+        )
+        if len(filler) < EXAM_PHRASES_COUNT - 1:
             raise TaskForUserNotFoundError(user.id)
 
-        exercises = list(exercises)
-
+        exercises = list(filler)
         wrong_phrase_index = random.randint(0, EXAM_PHRASES_COUNT - 1)
-        if wrong_phrase_index != 0:
-            exercises[0], exercises[wrong_phrase_index] = exercises[wrong_phrase_index], exercises[0]
+        exercises.insert(wrong_phrase_index, wrong_exercise)
 
         phrases = []
         for i, exercise in enumerate(exercises):

@@ -9,6 +9,7 @@ from app.exceptions import (
 )
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task14DrillContent, Task14ExamConfig, Task14ExamContent
+from app.repositories.exercise_filters import answer_eq, answer_ne
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import extract_sorted_digits
@@ -42,7 +43,7 @@ class Task14DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
-        exercise = await self._fetch_random_exercise(category.id, user.id)
+        exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task14DrillContent.model_validate(exercise.content)
 
@@ -115,16 +116,18 @@ class Task14ExamProcessor(BaseTaskProcessor):
         correct_count = random.choices([2, 3, 4], weights=CORRECT_COUNT_WEIGHTS)[0]
         wrong_count = EXAM_SENTENCES - correct_count
 
-        correct_exs = list(await self._exercise_repository.get_random_by_answer(
+        correct_exs = list(await self._exercise_selector.select_smart_by_group(
             category_id=category_id,
-            answer=answer_type,
+            user_id=user.id,
             limit=correct_count,
+            filters=[answer_eq(answer_type)],
         ))
 
-        wrong_exs = list(await self._exercise_repository.get_random_excluding_answer(
+        wrong_exs = list(await self._exercise_selector.select_smart_by_group(
             category_id=category_id,
-            exclude_answer=answer_type,
+            user_id=user.id,
             limit=wrong_count,
+            filters=[answer_ne(answer_type)],
         ))
 
         if len(correct_exs) < correct_count or len(wrong_exs) < wrong_count:

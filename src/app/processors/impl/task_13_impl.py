@@ -34,7 +34,7 @@ class Task13DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_random_exercise(parent_id, user.id)
+        exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task13Content.model_validate(exercise.content)
 
@@ -90,11 +90,11 @@ class Task13ExamProcessor(BaseTaskProcessor):
 
         if mode == _MODE_NE:
             all_exs = await self._fetch_ne_exercises(
-                parent_id, answer_type, opposite_answer, correct_count, wrong_count,
+                parent_id, user.id, answer_type, opposite_answer, correct_count, wrong_count,
             )
         else:
             all_exs = await self._fetch_ne_ni_exercises(
-                parent_id, answer_type, opposite_answer, correct_count,
+                parent_id, user.id, answer_type, opposite_answer, correct_count,
             )
 
         if all_exs is None:
@@ -131,23 +131,26 @@ class Task13ExamProcessor(BaseTaskProcessor):
     async def _fetch_ne_exercises(
         self,
         category_id: int,
+        user_id: int,
         answer_type: str,
         opposite_answer: str,
         correct_count: int,
         wrong_count: int,
     ) -> list[Exercise] | None:
-        correct_exs = list(await self._exercise_repository.get_random_by_answer_and_content_value(
+        correct_exs = list(await self._exercise_selector.select_by_answer_and_content(
             category_id=category_id,
+            user_id=user_id,
             answer=answer_type,
-            content_field="particle",
-            content_value="НЕ",
+            field="particle",
+            value="НЕ",
             limit=correct_count,
         ))
-        wrong_exs = list(await self._exercise_repository.get_random_by_answer_and_content_value(
+        wrong_exs = list(await self._exercise_selector.select_by_answer_and_content(
             category_id=category_id,
+            user_id=user_id,
             answer=opposite_answer,
-            content_field="particle",
-            content_value="НЕ",
+            field="particle",
+            value="НЕ",
             limit=wrong_count,
         ))
         if len(correct_exs) < correct_count or len(wrong_exs) < wrong_count:
@@ -157,16 +160,18 @@ class Task13ExamProcessor(BaseTaskProcessor):
     async def _fetch_ne_ni_exercises(
         self,
         category_id: int,
+        user_id: int,
         answer_type: str,
         opposite_answer: str,
         correct_count: int,
     ) -> list[Exercise] | None:
         ni_count = random.choices([1, 2, 3], weights=NI_COUNT_WEIGHTS)[0]
 
-        ni_exs = list(await self._exercise_repository.get_random_by_content_value(
+        ni_exs = list(await self._exercise_selector.select_by_content_value(
             category_id=category_id,
-            content_field="particle",
-            content_value="НИ",
+            user_id=user_id,
+            field="particle",
+            value="НИ",
             limit=ni_count,
         ))
         if not ni_exs:
@@ -180,18 +185,20 @@ class Task13ExamProcessor(BaseTaskProcessor):
         ne_correct_needed = min(ne_correct_needed, ne_total - 1)
         ne_wrong_needed = ne_total - ne_correct_needed
 
-        ne_correct_exs = list(await self._exercise_repository.get_random_by_answer_and_content_value(
+        ne_correct_exs = list(await self._exercise_selector.select_by_answer_and_content(
             category_id=category_id,
+            user_id=user_id,
             answer=answer_type,
-            content_field="particle",
-            content_value="НЕ",
+            field="particle",
+            value="НЕ",
             limit=ne_correct_needed,
         ))
-        ne_wrong_exs = list(await self._exercise_repository.get_random_by_answer_and_content_value(
+        ne_wrong_exs = list(await self._exercise_selector.select_by_answer_and_content(
             category_id=category_id,
+            user_id=user_id,
             answer=opposite_answer,
-            content_field="particle",
-            content_value="НЕ",
+            field="particle",
+            value="НЕ",
             limit=ne_wrong_needed,
         ))
 

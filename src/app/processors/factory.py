@@ -46,6 +46,7 @@ from app.processors.impl import (
     Task26ExamProcessor,
 )
 from app.repositories import ExerciseRepository, UserAnswerRepository
+from app.services.exercise_selector import ExerciseSelector
 
 PROCESSOR_MAPPING = {
     HandlerType.TASK_1_DRILL: Task1DrillProcessor,
@@ -94,9 +95,15 @@ PROCESSOR_MAPPING = {
 
 
 class ProcessorFactory:
-    def __init__(self, exercise_repository: ExerciseRepository, answer_repository: UserAnswerRepository) -> None:
+    def __init__(
+        self,
+        exercise_repository: ExerciseRepository,
+        answer_repository: UserAnswerRepository,
+        exercise_selector: ExerciseSelector,
+    ) -> None:
         self._exercise_repository = exercise_repository
         self._answer_repository = answer_repository
+        self._exercise_selector = exercise_selector
 
     def get_processor(self, handler_type: HandlerType) -> TaskProcessor:
         processor_cls = PROCESSOR_MAPPING.get(handler_type)
@@ -106,4 +113,5 @@ class ProcessorFactory:
         return processor_cls(
             exercise_repository=self._exercise_repository,
             answer_repository=self._answer_repository,
+            exercise_selector=self._exercise_selector,
         )

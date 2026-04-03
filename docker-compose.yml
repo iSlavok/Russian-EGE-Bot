@@ -45,6 +45,39 @@ services:
       - ./alembic.ini:/src/alembic.ini
     networks: [ bot_network ]
 
+  postgres-test:
+    image: postgres:17
+    profiles: [ "test" ]
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [ bot_network ]
+
+  bot-test:
+    build:
+      dockerfile: Dockerfile.test
+    profiles: [ "test" ]
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      TEST_DATABASE_URL: "postgresql+asyncpg://test:test@postgres-test:5432/test_db"
+    volumes:
+      - ./coverage:/src/coverage
+      - ./src/bot:/src/bot
+      - ./src/app:/src/app
+      - ./src/main.py:/src/main.py
+      - ./migrations:/src/migrations
+      - ./alembic.ini:/src/alembic.ini
+      - ./tests:/src/tests
+    networks: [ bot_network ]
+
   postgres:
     image: postgres:17
     profiles: [ "dev", "prod", "migrate" ]

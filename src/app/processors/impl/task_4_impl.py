@@ -5,7 +5,6 @@ from app.exceptions import (
     InvalidExerciseCountError,
     InvalidExerciseDataError,
     MissingTaskConfigError,
-    TaskForUserNotFoundError,
 )
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task4Content, Task4ExamConfig
@@ -37,7 +36,7 @@ def _add_context_to_word(word: str, content: Task4Content) -> str:
 class Task4DrillProcessor(BaseTaskProcessor):
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_random_exercise(parent_id, user.id)
+        exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task4Content.model_validate(exercise.content)
         if not exercise.answer.isdigit():
@@ -75,13 +74,7 @@ class Task4ExamProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-
-        exercises = await self._exercise_repository.get_random(
-            category_id=parent_id,
-            limit=EXAM_WORDS_COUNT,
-        )
-        if len(exercises) < EXAM_WORDS_COUNT:
-            raise TaskForUserNotFoundError(user.id)
+        exercises = await self._fetch_exercises(parent_id, user.id, EXAM_WORDS_COUNT)
 
         num_correct = random.randint(2, 4)
         correct_indices = set(random.sample(range(EXAM_WORDS_COUNT), num_correct))

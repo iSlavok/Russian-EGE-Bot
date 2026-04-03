@@ -35,7 +35,7 @@ class Task22DrillProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_random_exercise(parent_id, user.id)
+        exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task22DrillContent.model_validate(exercise.content)
         found_devices = exercise.answer.split(";")
@@ -104,6 +104,7 @@ class Task22ExamProcessor(BaseTaskProcessor):
 
         exercises = await self._exercise_repository.get_exam_22_exercises(
             category_id=parent_id,
+            user_id=user.id,
         )
         if len(exercises) < _EXAM_SENTENCES:
             raise TaskForUserNotFoundError(user.id)
