@@ -9,6 +9,7 @@ class CategoryDTO(BaseModel):
     name: str
     handler_type: HandlerType | None
     parent_id: int | None
+    is_ege_task: bool = False
 
     @classmethod
     def from_orm_obj(cls, orm_obj: Category) -> "CategoryDTO":
@@ -17,6 +18,7 @@ class CategoryDTO(BaseModel):
             name=orm_obj.name,
             handler_type=orm_obj.handler_type,
             parent_id=orm_obj.parent_id,
+            is_ege_task=orm_obj.is_ege_task,
         )
 
 
@@ -30,5 +32,6 @@ class CategoryWithChildrenDTO(CategoryDTO):
             name=orm_obj.name,
             handler_type=orm_obj.handler_type,
             parent_id=orm_obj.parent_id,
+            is_ege_task=orm_obj.is_ege_task,
             children=[CategoryDTO.from_orm_obj(child) for child in orm_obj.children],
         )

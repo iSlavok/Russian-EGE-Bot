@@ -7,6 +7,9 @@ MAIN_KB = InlineKeyboardMarkup(
         [
             InlineKeyboardButton(text="👉 Перейти к заданиям", callback_data="categories"),
         ],
+        [
+            InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
+        ],
     ],
 )
 

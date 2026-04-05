@@ -5,6 +5,7 @@ from app.processors import ProcessorFactory
 from app.repositories import ExerciseRepository, UserRepository
 from app.schemas import CheckResult, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
+from app.services.stats_service import StatsService
 
 
 class TaskService:
@@ -13,10 +14,12 @@ class TaskService:
             processor_factory: ProcessorFactory,
             user_repository: UserRepository,
             exercise_repository: ExerciseRepository,
+            stats_service: StatsService,
     ) -> None:
         self._processor_factory = processor_factory
         self._user_repository = user_repository
         self._exercise_repository = exercise_repository
+        self._stats_service = stats_service
 
     async def start_task(self, user: UserWithCategoryDTO) -> TaskUI:
         if not user.current_category:
@@ -56,4 +59,13 @@ class TaskService:
         if not user.current_category.handler_type:
             raise NoHandlerTypeError
         processor = self._processor_factory.get_processor(user.current_category.handler_type)
-        return await processor.process_answer(user, user_answer)
+        result = await processor.process_answer(user, user_answer)
+
+        await self._stats_service.record_answer_stats(
+            user_id=user.id,
+            category_id=user.current_category.id,
+            is_correct=result.is_correct,
+            exercise_ids=[ex.id for ex in (user.current_exercises or [])],
+        )
+
+        return result

@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models import User
 from app.schemas import CategoryDTO, ExerciseDTO
@@ -12,6 +12,7 @@ class UserDTO(BaseModel):
     telegram_id: int
     username: str | None
     full_name: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     exercise_started_at: datetime | None
     current_task_config: dict[str, Any] | None = None
     current_category_id: int | None = None
@@ -23,6 +24,7 @@ class UserDTO(BaseModel):
             telegram_id=orm_obj.telegram_id,
             username=orm_obj.username,
             full_name=orm_obj.full_name,
+            created_at=orm_obj.created_at,
             exercise_started_at=orm_obj.exercise_started_at,
             current_task_config=orm_obj.current_task_config,
             current_category_id=orm_obj.current_category_id,

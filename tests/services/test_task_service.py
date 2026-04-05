@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 
 from app.enums import HandlerType
@@ -8,11 +10,19 @@ from app.services.task_service import TaskService
 
 
 @pytest.fixture
-def task_service(processor_factory, user_repository, exercise_repository):
+def mock_stats_service():
+    svc = AsyncMock()
+    svc.record_answer_stats = AsyncMock()
+    return svc
+
+
+@pytest.fixture
+def task_service(processor_factory, user_repository, exercise_repository, mock_stats_service):
     return TaskService(
         processor_factory=processor_factory,
         user_repository=user_repository,
         exercise_repository=exercise_repository,
+        stats_service=mock_stats_service,
     )
 
 

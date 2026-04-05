@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy import Enum as SqlEnum
-from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import BaseDBModel
@@ -18,6 +18,8 @@ class Category(BaseDBModel):
         nullable=True,
         default=None,
     )
+
+    is_ege_task: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True, nullable=True)
 

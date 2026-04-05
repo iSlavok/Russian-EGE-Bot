@@ -138,6 +138,42 @@ class UserAnswerRepository(BaseRepository[UserAnswer]):
         result = await self.session.execute(statement)
         return result.all()
 
+    async def get_recent_results(
+        self, user_id: int, category_ids: Sequence[int], limit: int = 5,
+    ) -> dict[int, list[bool]]:
+        """Returns last `limit` is_correct values per category_id, newest first."""
+        if not category_ids:
+            return {}
+        rn = func.row_number().over(
+            partition_by=UserAnswer.category_id,
+            order_by=(UserAnswer.created_at.desc(), UserAnswer.id.desc()),
+        ).label("rn")
+
+        ranked = (
+            select(
+                UserAnswer.category_id,
+                UserAnswer.is_correct,
+                rn,
+            )
+            .where(
+                UserAnswer.user_id == user_id,
+                UserAnswer.category_id.in_(category_ids),
+            )
+        ).subquery()
+
+        stmt = (
+            select(ranked.c.category_id, ranked.c.is_correct)
+            .where(ranked.c.rn <= limit)
+            .order_by(ranked.c.category_id, ranked.c.rn)
+        )
+        result = await self.session.execute(stmt)
+        rows = result.all()
+
+        results_map: dict[int, list[bool]] = {}
+        for cat_id, is_correct in rows:
+            results_map.setdefault(cat_id, []).append(is_correct)
+        return results_map
+
     async def get_answer_group_stats(
         self, user_id: int, category_id: int, min_group_size: int, window_size: int = 5,
     ) -> Sequence[Row]:
