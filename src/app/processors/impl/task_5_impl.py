@@ -12,8 +12,7 @@ from app.exceptions import (
 from app.models import Exercise
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task5Content, Task5ExamConfig
-from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
-from app.schemas.user_schemas import UserWithCategoryDTO
+from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithCategoryDTO, UserWithExercisesDTO
 from app.utils import check_answer
 
 EXAM_SENTENCES_COUNT = 5
@@ -76,7 +75,8 @@ class Task5DrillProcessor(BaseTaskProcessor):
                 paronym.explanation for paronym in content.paronyms
             )
 
-            explanation = f"{sentence_with_correct_word}\n\n\n{paronym_explanations}"
+            explanation = (f"<i>{sentence_with_correct_word}</i>\n\n"
+                           f"<b>Объяснение:</b>\n<blockquote expandable>{paronym_explanations}</blockquote>")
 
             return CheckResult(
                 is_correct=base_result.is_correct,
@@ -204,27 +204,26 @@ class Task5ExamProcessor(BaseTaskProcessor):
             exercise_is_correct = is_correct if i == config.wrong_sentence_index else True
             self._record_answer(user, exercise.id, exercise_is_correct, user_answer, solve_time, group_id)
 
+        if not is_correct:
+            explanation = f"<b>Ваш ответ: {html.escape(user_answer, quote=False)}</b>\n"
+            explanation += f"<b>Правильный ответ: {correct_word}</b>\n"
+            explanation += f"<b>Неправильное слово в задании: {wrong_word}</b>\n\n"
+        else:
+            explanation = f"<b>Ответ: {correct_word}</b>\n"
+            explanation += f"<b>Неправильное слово в задании: {wrong_word}</b>\n\n"
+
         word_text = correct_word.lower()
         if wrong_exercise_content.sentence.lstrip().startswith("{word}"):
             word_text = word_text.capitalize()
         sentence_with_correct_word = wrong_exercise_content.sentence.format(
             word=f"<u>{word_text}</u>",
         )
+        explanation += f"<i>{sentence_with_correct_word}</i>\n\n"
 
         paronym_explanations = "\n\n".join(
             paronym.explanation for paronym in wrong_exercise_content.paronyms
         )
-
-        explanation = f"{sentence_with_correct_word}\n\n"
-        if not is_correct:
-            explanation += f"<b>Ваш ответ: {html.escape(user_answer, quote=False)}</b>\n"
-            explanation += f"<b>Правильный ответ: {correct_word}</b>\n"
-            explanation += f"<b>Неправильное слово в задании: {wrong_word}</b>\n\n"
-        else:
-            explanation += f"<b>Ответ: {correct_word}</b>\n"
-            explanation += f"<b>Неправильное слово в задании: {wrong_word}</b>\n\n"
-
-        explanation += paronym_explanations
+        explanation += f"<b>Объяснения:</b>\n<blockquote expandable>{paronym_explanations}</blockquote>"
 
         return CheckResult(
             is_correct=is_correct,
