@@ -1,6 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from dishka import FromDishka
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas import UserWithExercisesDTO
@@ -37,6 +38,7 @@ async def category_callback(
         task_service: FromDishka[TaskService],
         user_service: FromDishka[UserService],
 ) -> None:
+    logger.debug("User {} selected category_id={}", user.id, callback_data.category_id)
     category = await category_service.get_by_id_with_children(callback_data.category_id)
     if category.children:
         is_all_button = category.handler_type is not None

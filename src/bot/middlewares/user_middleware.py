@@ -5,6 +5,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 from aiogram.types import User as TelegramUser
 from dishka.integrations.aiogram import CONTAINER_NAME
+from loguru import logger
 
 from app.services.user_service import UserService
 
@@ -24,6 +25,7 @@ class UserMiddleware(BaseMiddleware):
     ) -> dict[str, Any]:
         event_from_user: TelegramUser | None = data["event_from_user"]
         if event_from_user:
+            logger.debug("Loading user: tg_id={} username={}", event_from_user.id, event_from_user.username)
             container: AsyncContainer = data[CONTAINER_NAME]
             user_service = await container.get(UserService)
 

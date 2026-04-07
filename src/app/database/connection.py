@@ -37,6 +37,7 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
         try:
             yield session
         except Exception:
+            logger.error("Database session error, rolling back")
             await session.rollback()
             raise
         finally:

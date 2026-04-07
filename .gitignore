@@ -13,3 +13,4 @@ wheels/
 .idea/
 data/
 coverage/
+logs/

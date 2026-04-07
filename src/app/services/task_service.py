@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+from loguru import logger
+
 from app.exceptions import ExerciseNotFoundError, NoCategoryError, NoHandlerTypeError, UserNotFoundError
 from app.processors import ProcessorFactory
 from app.repositories import ExerciseRepository, UserRepository
@@ -26,6 +28,10 @@ class TaskService:
             raise NoCategoryError
         if not user.current_category.handler_type:
             raise NoHandlerTypeError
+        logger.debug(
+            "Starting task for user_id={} category={} handler={}",
+            user.id, user.current_category.name, user.current_category.handler_type,
+        )
         processor = self._processor_factory.get_processor(user.current_category.handler_type)
         task_response = await processor.create_task(user)
 
@@ -47,6 +53,7 @@ class TaskService:
         db_user.current_task_config = task_response.task_config.model_dump() if task_response.task_config else None
         await self._user_repository.flush([db_user])
 
+        logger.info("Task started for user_id={} exercise_ids={}", user.id, exercise_ids)
         return task_response.task_ui
 
     async def check_answer(
@@ -68,4 +75,8 @@ class TaskService:
             exercise_ids=[ex.id for ex in (user.current_exercises or [])],
         )
 
+        logger.info(
+            "Answer checked for user_id={} correct={} category={}",
+            user.id, result.is_correct, user.current_category.name,
+        )
         return result

@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from dishka import FromDishka
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NoCategoryError, NoHandlerTypeError
@@ -43,6 +44,7 @@ async def get_task(
         user_service: FromDishka[UserService],
         category_service: FromDishka[CategoryService],
 ) -> None:
+    logger.debug("User {} requested task for category_id={}", user.id, callback_data.category_id)
     await message_manager.edit_message(text="Загрузка задания...")
     categories = await category_service.get_by_id_with_tree(callback_data.category_id)
     await user_service.select_category(user=user, category=categories[0])
@@ -94,6 +96,7 @@ async def submit_answer_button(
         task_service: FromDishka[TaskService],
 ) -> None:
     await message_manager.clear_messages(keep_bot_last=1)
+    logger.debug("User {} submitted button answer: '{}'", user.id, callback_data.answer)
     result = await task_service.check_answer(user, callback_data.answer)
     response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
     if result.explanation:
@@ -119,6 +122,7 @@ async def submit_answer(
         await message_manager.send_message(text="Пожалуйста, отправьте текстовый ответ.")
         return
     await message_manager.clear_messages(keep_bot_last=1)
+    logger.debug("User {} submitted text answer: '{}'", user.id, message.text)
     result = await task_service.check_answer(user, message.text)
     response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
     if result.explanation:

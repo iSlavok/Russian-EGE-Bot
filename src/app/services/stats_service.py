@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from app.models import Category, UserCategoryStat
 from app.repositories import CategoryRepository, UserAnswerRepository
 from app.repositories.user_category_stat_repository import UserCategoryStatRepository
@@ -49,6 +51,10 @@ class StatsService:
 
         await self._user_category_stat_repo.increment_answer(
             user_id, category_id, is_correct=is_correct, is_new_exercise=is_new,
+        )
+        logger.debug(
+            "Stats recorded: user_id={} category_id={} correct={} new_exercise={}",
+            user_id, category_id, is_correct, is_new,
         )
 
     async def get_profile_summary(self, user_id: int, full_name: str, registered_at: datetime) -> ProfileSummaryDTO:

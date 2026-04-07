@@ -1,3 +1,4 @@
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import CategoryNotFoundError
@@ -20,6 +21,7 @@ class CategoryService:
     async def get_by_id_with_children(self, category_id: int) -> CategoryWithChildrenDTO:
         category = await self._category_repository.get_by_id_with_children(category_id)
         if category is None:
+            logger.warning("Category not found: id={}", category_id)
             raise CategoryNotFoundError(category_id)
         return CategoryWithChildrenDTO.from_orm_obj(category)
 

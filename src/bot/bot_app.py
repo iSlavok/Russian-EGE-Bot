@@ -56,7 +56,9 @@ async def start_bot(app_container: AsyncContainer) -> None:
     await bot.set_my_commands(commands)
 
     try:
-        logger.info("Starting bot polling...")
+        logger.info("Bot initialized, starting polling...")
         await dp.start_polling(bot)
     finally:
+        logger.info("Shutting down bot...")
         await app_container.close()
+        logger.info("Bot stopped")

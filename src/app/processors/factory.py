@@ -1,3 +1,5 @@
+from loguru import logger
+
 from app.enums import HandlerType
 from app.exceptions import ProcessorNotFoundError
 from app.processors.base_processor import TaskProcessor
@@ -108,8 +110,10 @@ class ProcessorFactory:
     def get_processor(self, handler_type: HandlerType) -> TaskProcessor:
         processor_cls = PROCESSOR_MAPPING.get(handler_type)
         if not processor_cls:
+            logger.warning("No processor found for handler_type={}", handler_type)
             raise ProcessorNotFoundError(str(handler_type))
 
+        logger.debug("Using processor {} for handler_type={}", processor_cls.__name__, handler_type)
         return processor_cls(
             exercise_repository=self._exercise_repository,
             answer_repository=self._answer_repository,

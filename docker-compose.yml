@@ -14,6 +14,7 @@ services:
       - ./src/app:/src/app
       - ./src/main.py:/src/main.py
       - ./migrations:/src/migrations
+      - ./logs:/src/logs
     networks: [ bot_network ]
 
   bot-prod:
@@ -27,6 +28,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - bot_logs:/src/logs
     networks: [ bot_network ]
 
   bot-migrate:
@@ -116,6 +119,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  bot_logs:
 
 networks:
   bot_network:
