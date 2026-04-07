@@ -1,6 +1,5 @@
 import html
 import random
-import uuid
 from collections.abc import Sequence
 
 from app.exceptions import (
@@ -198,11 +197,8 @@ class Task5ExamProcessor(BaseTaskProcessor):
         )
 
         solve_time = self._compute_solve_time(user)
-        group_id = uuid.uuid4()
 
-        for i, exercise in enumerate(ordered_exercises):
-            exercise_is_correct = is_correct if i == config.wrong_sentence_index else True
-            self._record_answer(user, exercise.id, exercise_is_correct, user_answer, solve_time, group_id)
+        self._record_answer(user, wrong_exercise.id, is_correct, user_answer, solve_time)
 
         if not is_correct:
             explanation = f"<b>Ваш ответ: {html.escape(user_answer, quote=False)}</b>\n"

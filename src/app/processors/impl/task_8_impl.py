@@ -34,16 +34,16 @@ ERROR_TYPE_DESCRIPTIONS: dict[str, str] = {
 }
 
 ERROR_TYPE_SHORT_LABELS: dict[str, str] = {
-    "participial_clause_error": "Причастный оборот",
-    "homogeneous_members_error": "Однородные члены",
-    "adverbial_participle_error": "Деепричастный оборот",
-    "prepositional_case_error": "Падеж с предлогом",
     "subject_predicate_agreement": "Подлежащее и сказуемое",
-    "mismatched_appositive_error": "Несогл. приложение",
-    "complex_sentence_error": "Сложное предложение",
-    "indirect_speech_error": "Косвенная речь",
-    "verb_aspect_tense_error": "Видо-время глаголов",
-    "numeral_usage_error": "Числительное",
+    "adverbial_participle_error":  "Деепричастный оборот",
+    "participial_clause_error":    "Причастный оборот",
+    "homogeneous_members_error":   "Однородные члены",
+    "prepositional_case_error":    "Падежная форма",
+    "verb_aspect_tense_error":     "Видо-время глаголов",
+    "mismatched_appositive_error": "Несоглас. приложение",
+    "complex_sentence_error":      "Сложное предложение",
+    "indirect_speech_error":       "Косвенная речь",
+    "numeral_usage_error":         "Числительное",
 }
 
 LETTER_LABELS = ["А", "Б", "В", "Г", "Д"]
