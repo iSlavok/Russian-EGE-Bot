@@ -26,10 +26,7 @@ class ExerciseRepository(BaseRepository[Exercise]):
         """
         answered_sq = (
             select(UserAnswer.exercise_id)
-            .where(
-                UserAnswer.user_id == user_id,
-                UserAnswer.category_id == category_id,
-            )
+            .where(UserAnswer.user_id == user_id)
             .distinct()
             .subquery()
         )

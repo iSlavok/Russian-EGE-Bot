@@ -45,18 +45,15 @@ class UserAnswerRepository(BaseRepository[UserAnswer]):
                 UserAnswer.created_at,
                 rn,
             )
+            .join(Exercise, Exercise.id == UserAnswer.exercise_id)
             .where(
                 UserAnswer.user_id == user_id,
-                UserAnswer.category_id == category_id,
+                Exercise.category_id == category_id,
             )
         )
 
         if filters:
-            ranked_query = (
-                ranked_query
-                .join(Exercise, Exercise.id == UserAnswer.exercise_id)
-                .where(*filters)
-            )
+            ranked_query = ranked_query.where(*filters)
 
         ranked = ranked_query.subquery()
 
@@ -184,7 +181,7 @@ class UserAnswerRepository(BaseRepository[UserAnswer]):
         """
         answered_sq = (
             select(UserAnswer.exercise_id)
-            .where(UserAnswer.user_id == user_id, UserAnswer.category_id == category_id)
+            .where(UserAnswer.user_id == user_id)
             .distinct()
             .subquery()
         )
@@ -216,7 +213,8 @@ class UserAnswerRepository(BaseRepository[UserAnswer]):
                 UserAnswer.created_at,
                 rn,
             )
-            .where(UserAnswer.user_id == user_id, UserAnswer.category_id == category_id)
+            .join(Exercise, Exercise.id == UserAnswer.exercise_id)
+            .where(UserAnswer.user_id == user_id, Exercise.category_id == category_id)
         ).subquery()
 
         answer_stats = (
