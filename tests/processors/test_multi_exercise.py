@@ -979,6 +979,20 @@ class TestTask13ExamCreateTask:
                 answer="SEPARATE",
                 explanation=f"Объяснение {i}",
             )
+        for i in range(3):
+            await exercise_factory(
+                category_id=parent.id,
+                content={"sentence": f"(НИ)слово слитно {i}", "particle": "НИ"},
+                answer="TOGETHER",
+                explanation=f"Объяснение НИ {i}",
+            )
+        for i in range(3):
+            await exercise_factory(
+                category_id=parent.id,
+                content={"sentence": f"(НИ)слово раздельно {i}", "particle": "НИ"},
+                answer="SEPARATE",
+                explanation=f"Объяснение НИ {i}",
+            )
         user = await user_factory()
         dto = _user_dto(user, child)
 

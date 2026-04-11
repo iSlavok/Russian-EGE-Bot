@@ -160,6 +160,17 @@ DIRECT_CATEGORY_CASES = [
         "12",
         id="task21_exam",
     ),
+    pytest.param(
+        HandlerType.TASK_6_EXAM,
+        {
+            "sentence": "Предложение с ошибкой",
+            "task_type": "REMOVE",
+            "sentence_with_markup": "Предложение с <u>ошибкой</u>",
+            "corrected_sentence": "Предложение с исправлением",
+        },
+        "ошибкой",
+        id="task6_exam",
+    ),
 ]
 
 
@@ -222,17 +233,6 @@ PARENT_CATEGORY_CASES = [
         {"text": "Предложение с <b>выделенным</b> словом.", "word_with_definition": "Слово — значение"},
         "true",
         id="task2_drill",
-    ),
-    pytest.param(
-        HandlerType.TASK_6_EXAM,
-        {
-            "sentence": "Предложение с ошибкой",
-            "task_type": "REMOVE",
-            "sentence_with_markup": "Предложение с <u>ошибкой</u>",
-            "corrected_sentence": "Предложение с исправлением",
-        },
-        "ошибкой",
-        id="task6_exam",
     ),
     pytest.param(
         HandlerType.TASK_8_DRILL,
