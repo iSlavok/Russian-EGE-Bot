@@ -12,8 +12,8 @@ class Task2DrillProcessor(BaseTaskProcessor):
     """
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
-        parent_id = self._require_parent_category_id(user)
-        exercise = await self._fetch_exercise(parent_id, user.id)
+        category = self._require_category(user)
+        exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task2Content.model_validate(exercise.content)
 
