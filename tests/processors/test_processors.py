@@ -171,6 +171,12 @@ DIRECT_CATEGORY_CASES = [
         "ошибкой",
         id="task6_exam",
     ),
+    pytest.param(
+        HandlerType.TASK_2_DRILL,
+        {"text": "Предложение с <b>выделенным</b> словом.", "word_with_definition": "Слово — значение"},
+        "false",
+        id="task2_drill",
+    ),
 ]
 
 
@@ -228,12 +234,6 @@ class TestDirectCategoryProcessAnswer:
 # ===================================================================
 
 PARENT_CATEGORY_CASES = [
-    pytest.param(
-        HandlerType.TASK_2_DRILL,
-        {"text": "Предложение с <b>выделенным</b> словом.", "word_with_definition": "Слово — значение"},
-        "true",
-        id="task2_drill",
-    ),
     pytest.param(
         HandlerType.TASK_8_DRILL,
         {"sentence": "Предложение с ошибкой", "corrected_sentence": "Исправленное предложение"},

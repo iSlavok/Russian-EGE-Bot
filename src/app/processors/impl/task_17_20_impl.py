@@ -48,8 +48,9 @@ class _BaseTaskN17N20Processor(BaseTaskProcessor):
             )
 
         explanation += (
-            f"\n\n<i>{content.correct_sentence}</i>\n\n"
-            f"<b>Объяснение:</b>\n<blockquote expandable>{exercise.explanation}</blockquote>"
+            f"\n\n<b>Исходное:</b>\n<i>{content.sentence}</i>"
+            f"\n\n<b>С запятыми:</b>\n<i>{content.correct_sentence}</i>"
+            f"\n\n<b>Объяснение:</b>\n<blockquote expandable>{exercise.explanation}</blockquote>"
         )
 
         return CheckResult(is_correct=is_correct, explanation=explanation)
