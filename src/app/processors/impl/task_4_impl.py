@@ -5,8 +5,10 @@ from app.exceptions import (
     InvalidExerciseCountError,
     InvalidExerciseDataError,
     MissingTaskConfigError,
+    NoCurrentExercisesError,
 )
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task4Formatter
 from app.processors.schemas import Task4Content, Task4ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
@@ -23,17 +25,9 @@ def _apply_stress(word: str, stress_index: int) -> str:
     return f"{word[:i]}{word[i].upper()}{word[i + 1:]}"
 
 
-def _add_context_to_word(word: str, content: Task4Content) -> str:
-    """Add context before/after the word if present in content."""
-    word_with_context = word
-    if content.context_before:
-        word_with_context = f"{content.context_before} {word_with_context}"
-    if content.context_after:
-        word_with_context = f"{word_with_context} {content.context_after}"
-    return word_with_context
-
-
 class Task4DrillProcessor(BaseTaskProcessor):
+    _formatter = Task4Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
         exercise = await self._fetch_exercise(parent_id, user.id)
@@ -51,18 +45,23 @@ class Task4DrillProcessor(BaseTaskProcessor):
         ]
         random.shuffle(options)
 
-        word_with_context = _add_context_to_word(content.word, content)
-
         return TaskResponse(
-            task_ui=TaskUI(
-                text=f"Выберите правильное ударение в слове: <b>{word_with_context}</b>.",
-                options=options,
-            ),
+            task_ui=TaskUI(view=self._formatter.drill_condition(content), options=options),
             exercise_ids=exercise.id,
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        return await self._process_answer_single_exercise(user, user_answer)
+        base_result = await self._process_answer_single_exercise(user, user_answer)
+
+        if not user.current_exercises:
+            raise NoCurrentExercisesError
+        exercise = user.current_exercises[0]
+
+        return CheckResult(
+            is_correct=base_result.is_correct,
+            explanation=None,
+            result_view=self._formatter.drill_result(exercise.explanation or "", is_correct=base_result.is_correct),
+        )
 
 
 class Task4ExamProcessor(BaseTaskProcessor):
@@ -72,6 +71,8 @@ class Task4ExamProcessor(BaseTaskProcessor):
     Пользователь должен выбрать все правильные слова, введя их номера (например, "124").
     """
 
+    _formatter = Task4Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
         exercises = await self._fetch_exercises(parent_id, user.id, EXAM_WORDS_COUNT)
@@ -79,34 +80,20 @@ class Task4ExamProcessor(BaseTaskProcessor):
         num_correct = random.randint(2, 4)
         correct_indices = set(random.sample(range(EXAM_WORDS_COUNT), num_correct))
 
-        words_with_stress = []
+        contents = []
         stress_positions = []
-
         for i, exercise in enumerate(exercises):
             content = Task4Content.model_validate(exercise.content)
             if not exercise.answer.isdigit():
                 raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
             correct_stress_index = int(exercise.answer)
-
-            is_correct = i in correct_indices
-            stress_index = correct_stress_index if is_correct else content.incorrect_stress
-
-            word_with_stress = _apply_stress(content.word, stress_index)
-            word_with_stress = _add_context_to_word(word_with_stress, content)
-            words_with_stress.append(word_with_stress)
-            stress_positions.append(stress_index)
-
-        task_text = ("Укажите варианты ответов, в которых верно выделана буква, обозначающая ударный гласный звук. "
-                     "Запишите номера ответов.\n\n")
-        for i, word in enumerate(words_with_stress, start=1):
-            task_text += f"{i}) {word}\n"
+            shown_stress = correct_stress_index if i in correct_indices else content.incorrect_stress
+            contents.append(content)
+            stress_positions.append(shown_stress)
 
         exercise_ids = [ex.id for ex in exercises]
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=None,
-            ),
+            task_ui=TaskUI(view=self._formatter.condition(contents, stress_positions), options=None),
             exercise_ids=exercise_ids,
             task_config=Task4ExamConfig(
                 exercise_ids=exercise_ids,
@@ -139,23 +126,18 @@ class Task4ExamProcessor(BaseTaskProcessor):
         solve_time = self._compute_solve_time(user)
         group_id = uuid.uuid4()
 
-        explanation = ""
+        explanations = []
         for i, exercise in enumerate(ordered_exercises, start=1):
             word_is_correct = i in correct_indices
             user_selected_word = i in user_selected
             word_answer_is_correct = word_is_correct == user_selected_word
 
             self._record_answer(user, exercise.id, word_answer_is_correct, user_answer, solve_time, group_id)
-            explanation += f"{i}) {exercise.explanation}\n"
+            explanations.append(exercise.explanation or "")
 
         correct_numbers = "".join(str(i) for i in sorted(correct_indices))
-        if not is_correct:
-            explanation = f"<b>Правильный ответ: {correct_numbers}</b>\n\n" + explanation
-            explanation = f"Ваш ответ: {user_answer}\n" + explanation
-        else:
-            explanation = f"<b>Ответ: {correct_numbers}</b>\n\n" + explanation
-
         return CheckResult(
             is_correct=is_correct,
-            explanation=explanation,
+            explanation=None,
+            result_view=self._formatter.result(explanations, correct_numbers, user_answer, is_correct=is_correct),
         )

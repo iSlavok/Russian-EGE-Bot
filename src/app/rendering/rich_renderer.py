@@ -9,8 +9,10 @@ class RichRenderer:
     HARD_BREAK = "  \n"  # внутри <details> одиночный \n схлопывается — нужен жёсткий перенос
 
     def render_task(self, view: TaskView) -> str:
-        body = "\n\n".join(self.render_block(block, correct=True, in_details=False) for block in view.blocks)
-        out = f"### {view.heading}\n\n{view.instruction}\n\n---\n\n{body}"
+        out = f"### {view.heading}\n\n{view.instruction}"
+        if view.blocks:
+            body = "\n\n".join(self.render_block(block, correct=True, in_details=False) for block in view.blocks)
+            out += f"\n\n---\n\n{body}"
         if view.footer:
             out += f"\n\n_{view.footer}_"
         return out
@@ -19,7 +21,8 @@ class RichRenderer:
         lines = ["**✅ Верно**" if view.correct else "**❌ Неверно**"]
         if view.wrong_answer:
             lines.append(self._answer_line(view.wrong_answer))
-        lines.append(self._answer_line(view.answer))
+        if view.answer:
+            lines.append(self._answer_line(view.answer))
         if view.note:
             lines.append(self._answer_line(view.note))
         body = "\n\n".join(self.render_block(block, correct=view.correct, in_details=False) for block in view.blocks)
@@ -34,7 +37,8 @@ class RichRenderer:
         if block.kind == "quote":
             return self._quote(block.lines, hard=in_details)
         if block.kind == "numbered_list":
-            items = [f"{block.start + i}. {item}" for i, item in enumerate(block.items)]
+            sep = ")" if block.paren else "."
+            items = [f"{block.start + i}{sep} {item}" for i, item in enumerate(block.items)]
             return self._quote(items, hard=in_details) if block.quoted else self._join(items, hard=in_details)
         if block.kind == "bullet_list":
             return self._join([f"- {item}" for item in block.items], hard=in_details)

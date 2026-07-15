@@ -21,6 +21,7 @@ class NumberedList(BaseModel):
     kind: Literal["numbered_list"] = "numbered_list"
     items: list[str]
     quoted: bool = False
+    paren: bool = False  # маркер "N)" вместо "N."
     start: int = 1
 
 
@@ -56,7 +57,7 @@ class AnswerLine(BaseModel):
 
 class ResultView(BaseModel):
     correct: bool
-    answer: AnswerLine
+    answer: AnswerLine | None = None
     wrong_answer: AnswerLine | None = None
     note: AnswerLine | None = None
     blocks: list[Block] = Field(default_factory=list)

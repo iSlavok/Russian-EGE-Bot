@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.enums import HandlerType
+from app.rendering.rich_renderer import RichRenderer
 from app.schemas import CategoryDTO, ExerciseDTO, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 
@@ -283,8 +284,10 @@ class TestTask4WithContext:
 
         processor = processor_factory.get_processor(HandlerType.TASK_4_DRILL)
         result = await processor.create_task(dto)
-        assert "красивые" in result.task_ui.text
-        assert "на столе" in result.task_ui.text
+        assert result.task_ui.view is not None
+        out = RichRenderer().render_task(result.task_ui.view)
+        assert "красивые" in out
+        assert "на столе" in out
 
 
 # ===================================================================
