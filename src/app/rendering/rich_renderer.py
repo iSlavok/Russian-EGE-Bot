@@ -17,19 +17,18 @@ def _quote(lines: list[str], *, hard: bool) -> str:
 
 
 def render_block(block: Block, *, correct: bool, in_details: bool) -> str:
-    kind = block.kind
-    if kind == "paragraph":
+    if block.kind == "paragraph":
         return block.text
-    if kind == "divider":
+    if block.kind == "divider":
         return "---"
-    if kind == "quote":
+    if block.kind == "quote":
         return _quote(block.lines, hard=in_details)
-    if kind == "numbered_list":
+    if block.kind == "numbered_list":
         items = [f"{block.start + i}. {it}" for i, it in enumerate(block.items)]
         return _quote(items, hard=in_details) if block.quoted else _join_lines(items, hard=in_details)
-    if kind == "bullet_list":
+    if block.kind == "bullet_list":
         return _join_lines([f"- {it}" for it in block.items], hard=in_details)
-    msg = f"unknown block kind: {kind}"
+    msg = f"unknown block kind: {block.kind}"
     raise ValueError(msg)
 
 
