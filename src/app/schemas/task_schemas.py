@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.schemas.rich_view import ResultView, TaskView
+
 
 class TaskOption(BaseModel):
     text: str
@@ -7,11 +9,12 @@ class TaskOption(BaseModel):
 
 
 class TaskUI(BaseModel):
-    text: str
+    text: str | None = None
     text_continuation: str | None = None
     options: list[TaskOption] | None = None
     parse_mode: str = "HTML"
     options_per_row: int | list[int] = 1
+    view: TaskView | None = None
 
 
 class TaskResponse(BaseModel):
@@ -23,3 +26,4 @@ class TaskResponse(BaseModel):
 class CheckResult(BaseModel):
     is_correct: bool
     explanation: str | None
+    result_view: ResultView | None = None

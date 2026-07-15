@@ -145,3 +145,17 @@ class TestAddBotMessage:
         await manager.add_bot_message(100)
         data = await fake_state.get_data()
         assert data["bot_messages"].count(100) == 1
+
+
+class TestSendRich:
+    async def test_send_rich_calls_native_and_tracks_id(self, manager, mock_bot, fake_state):
+        mock_bot.send_rich_message.return_value = make_message(message_id=200, chat_id=123)
+        message_id = await manager.send_rich("**hi**")
+        assert message_id == 200
+        mock_bot.send_rich_message.assert_awaited_once()
+        kwargs = mock_bot.send_rich_message.call_args.kwargs
+        assert kwargs["chat_id"] == 123
+        assert kwargs["rich_message"].markdown == "**hi**"
+        assert kwargs["rich_message"].skip_entity_detection is True
+        data = await fake_state.get_data()
+        assert 200 in data["bot_messages"]

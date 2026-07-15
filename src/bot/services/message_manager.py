@@ -6,7 +6,7 @@ from typing import Any, Self, cast
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InputRichMessage, Message, ReplyMarkupUnion
 
 _user_locks = defaultdict(asyncio.Lock)
 
@@ -82,6 +82,26 @@ class MessageManager:
             await self._clear_messages(data, keep_bot_last=keep_bot_last)
 
         return message
+
+    async def send_rich(
+            self,
+            markdown: str,
+            *, reply_markup: ReplyMarkupUnion | None = None,
+            clear_previous: bool = True,
+            keep_bot_last: int = 1,
+    ) -> int:
+        async with self._lock:
+            data = await self._load_data()
+            message = await self.bot.send_rich_message(
+                chat_id=self.chat_id,
+                rich_message=InputRichMessage(markdown=markdown, skip_entity_detection=True),
+                reply_markup=reply_markup,
+            )
+            self._add_bot_message(message.message_id, data)
+            if clear_previous:
+                await self._clear_messages(data, keep_bot_last=keep_bot_last)
+            await self._save_data(data)
+        return message.message_id
 
     async def edit_message(
             self,
