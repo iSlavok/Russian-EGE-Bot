@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.schemas.rich_view import Block, TaskView
+    from app.schemas.rich_view import AnswerLine, Block, ResultView, TaskView
 
 HARD_BREAK = "  \n"  # жёсткий перенос: одиночный \n внутри <details> схлопывается
 
@@ -45,3 +46,28 @@ def render_task(view: TaskView) -> str:
     if view.footer:
         out += f"\n\n_{view.footer}_"
     return out
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", "", s).lower()
+
+
+def _answer_line(a: AnswerLine, *, strike: bool) -> str:
+    if strike:
+        parts = [f"~~{v}~~" for v in a.values]
+    elif a.user:
+        hl = _norm(a.user)
+        parts = [f"<u>{v}</u>" if _norm(v) == hl else v for v in a.values]
+    else:
+        parts = list(a.values)
+    return f"**{a.label}:** " + " / ".join(parts)
+
+
+def render_result(view: ResultView) -> str:
+    lines = ["**✅ Верно**" if view.correct else "**❌ Неверно**"]
+    if view.wrong_answer:
+        lines.append(_answer_line(view.wrong_answer, strike=True))
+    lines.append(_answer_line(view.answer, strike=False))
+    body = "\n\n".join(render_block(b, correct=view.correct, in_details=False) for b in view.blocks)
+    head = "\n\n".join(lines)
+    return f"{head}\n\n{body}" if body else head
