@@ -4,6 +4,7 @@ from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
 from app.processors.schemas import Task1Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
+from app.schemas.rich_view import AnswerLine, Collapsible, Quote, ResultView, TaskView
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import check_answer
 
@@ -29,11 +30,14 @@ class Task1DrillProcessor(BaseTaskProcessor):
         content = Task1Content.model_validate(exercise.content)
 
         task_text = f"{content.instruction}\n\n<i>{html.escape(content.text, quote=False)}</i>"
+        gap_lines = html.escape(content.text, quote=False).split("\n")
+        view = TaskView(
+            heading="Задание 1",
+            instruction=html.escape(content.instruction, quote=False),
+            blocks=[Quote(lines=gap_lines)],
+        )
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=None,
-            ),
+            task_ui=TaskUI(text=task_text, view=view, options=None),
             exercise_ids=exercise.id,
         )
 
@@ -63,7 +67,25 @@ class Task1DrillProcessor(BaseTaskProcessor):
                 explanation = f"<b>Правильные ответы: {' / '.join(correct_answers)}</b>\n\n" + explanation
             explanation = f"Ваш ответ: {html.escape(user_answer, quote=False)}\n" + explanation
 
+        label_ok = "Ответ" if len(correct_answers) == 1 else "Ответы"
+        frag = Collapsible(
+            summary="Фрагмент текста",
+            blocks=[Quote(lines=[exercise.explanation or ""])],
+            open_if_wrong=True,
+        )
+        if is_correct:
+            result_answer = AnswerLine(label=label_ok, values=correct_answers, user=user_answer.strip())
+            wrong_line = None
+        else:
+            wrong_label = "Правильный ответ" if len(correct_answers) == 1 else "Правильные ответы"
+            result_answer = AnswerLine(label=wrong_label, values=correct_answers)
+            wrong_line = AnswerLine(label="Ваш ответ", values=[user_answer.strip()])
+        result_view = ResultView(
+            correct=is_correct, answer=result_answer, wrong_answer=wrong_line, blocks=[frag],
+        )
+
         return CheckResult(
             is_correct=is_correct,
             explanation=explanation,
+            result_view=result_view,
         )
