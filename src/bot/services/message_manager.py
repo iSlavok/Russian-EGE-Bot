@@ -8,6 +8,8 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from bot.services.rich_api import send_rich_message
+
 _user_locks = defaultdict(asyncio.Lock)
 
 
@@ -82,6 +84,23 @@ class MessageManager:
             await self._clear_messages(data, keep_bot_last=keep_bot_last)
 
         return message
+
+    async def send_rich(
+            self,
+            markdown: str,
+            *, reply_markup: Any = None,  # noqa: ANN401
+            clear_previous: bool = True,
+            keep_bot_last: int = 1,
+    ) -> int:
+        markup = reply_markup.model_dump(exclude_none=True) if reply_markup is not None else None
+        async with self._lock:
+            data = await self._load_data()
+            message_id = await send_rich_message(self.bot, self.chat_id, markdown, markup)
+            self._add_bot_message(message_id, data)
+            if clear_previous:
+                await self._clear_messages(data, keep_bot_last=keep_bot_last)
+            await self._save_data(data)
+        return message_id
 
     async def edit_message(
             self,
