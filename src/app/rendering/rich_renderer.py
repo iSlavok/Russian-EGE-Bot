@@ -28,6 +28,13 @@ def render_block(block: Block, *, correct: bool, in_details: bool) -> str:
         return _quote(items, hard=in_details) if block.quoted else _join_lines(items, hard=in_details)
     if block.kind == "bullet_list":
         return _join_lines([f"- {it}" for it in block.items], hard=in_details)
+    if block.kind == "collapsible":
+        is_open = block.open or (block.open_if_wrong and not correct)
+        tag = "<details open>" if is_open else "<details>"
+        inner = "\n\n".join(
+            render_block(b, correct=correct, in_details=True) for b in block.blocks
+        )
+        return f"{tag}<summary>{block.summary}</summary>\n\n{inner}\n\n</details>"
     msg = f"unknown block kind: {block.kind}"
     raise ValueError(msg)
 
