@@ -8,11 +8,11 @@ from app.schemas import ResultView, TaskView
 
 
 class Task1Formatter(BaseFormatter):
-    HEADING = "Задание 1"
+    TASK_NUMBER = 1
 
     def condition(self, content: Task1Content) -> TaskView:
         return TaskView(
-            heading=self.HEADING,
+            heading=self.heading,
             instruction=self._esc(content.instruction),
             blocks=[self._text_quote(content.text)],
         )

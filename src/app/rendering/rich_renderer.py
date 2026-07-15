@@ -20,6 +20,8 @@ class RichRenderer:
         if view.wrong_answer:
             lines.append(self._answer_line(view.wrong_answer, strike=True))
         lines.append(self._answer_line(view.answer, strike=False))
+        if view.note:
+            lines.append(self._answer_line(view.note, strike=False))
         body = "\n\n".join(self.render_block(block, correct=view.correct, in_details=False) for block in view.blocks)
         head = "\n\n".join(lines)
         return f"{head}\n\n{body}" if body else head

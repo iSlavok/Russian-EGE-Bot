@@ -11,6 +11,11 @@ from app.schemas import AnswerLine, Collapsible, Quote
 
 class BaseFormatter:
     GAP = "< . . . >"
+    TASK_NUMBER: int
+
+    @property
+    def heading(self) -> str:
+        return f"Задание {self.TASK_NUMBER}"
 
     @staticmethod
     def _esc(text: str) -> str:

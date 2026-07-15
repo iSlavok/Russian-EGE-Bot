@@ -57,6 +57,7 @@ class ResultView(BaseModel):
     correct: bool
     answer: AnswerLine
     wrong_answer: AnswerLine | None = None
+    note: AnswerLine | None = None
     blocks: list[Block] = Field(default_factory=list)
 
 
