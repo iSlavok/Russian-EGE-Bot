@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -34,12 +34,12 @@ class BulletList(BaseModel):
 class Collapsible(BaseModel):
     kind: Literal["collapsible"] = "collapsible"
     summary: str
-    blocks: list["Block"]
+    blocks: list[Block]
     open: bool = False
     open_if_wrong: bool = False
 
 
-Block = Union[Paragraph, Divider, Quote, NumberedList, BulletList, Collapsible]
+type Block = Paragraph | Divider | Quote | NumberedList | BulletList | Collapsible
 
 
 class TaskView(BaseModel):
