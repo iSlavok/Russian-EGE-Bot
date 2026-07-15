@@ -18,10 +18,10 @@ class RichRenderer:
     def render_result(self, view: ResultView) -> str:
         lines = ["**✅ Верно**" if view.correct else "**❌ Неверно**"]
         if view.wrong_answer:
-            lines.append(self._answer_line(view.wrong_answer, strike=True))
-        lines.append(self._answer_line(view.answer, strike=False))
+            lines.append(self._answer_line(view.wrong_answer))
+        lines.append(self._answer_line(view.answer))
         if view.note:
-            lines.append(self._answer_line(view.note, strike=False))
+            lines.append(self._answer_line(view.note))
         body = "\n\n".join(self.render_block(block, correct=view.correct, in_details=False) for block in view.blocks)
         head = "\n\n".join(lines)
         return f"{head}\n\n{body}" if body else head
@@ -52,8 +52,8 @@ class RichRenderer:
     def _quote(self, lines: list[str], *, hard: bool) -> str:
         return self._join([f"> {line}" for line in lines], hard=hard)
 
-    def _answer_line(self, answer: AnswerLine, *, strike: bool) -> str:
-        if strike:
+    def _answer_line(self, answer: AnswerLine) -> str:
+        if answer.strike:
             parts = [f"~~{value}~~" for value in answer.values]
         elif answer.user:
             highlighted = self._norm(answer.user)

@@ -51,6 +51,7 @@ class AnswerLine(BaseModel):
     label: str
     values: list[str]
     user: str | None = None
+    strike: bool = False
 
 
 class ResultView(BaseModel):

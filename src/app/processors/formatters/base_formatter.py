@@ -37,9 +37,9 @@ class BaseFormatter:
         return AnswerLine(label="Правильный ответ" if len(values) == 1 else "Правильные ответы", values=values)
 
     @staticmethod
-    def _your_answer_line(user_answer: str) -> AnswerLine:
-        """Строка «Ваш ответ» (зачёркивается рендерером как неверная)."""
-        return AnswerLine(label="Ваш ответ", values=[user_answer])
+    def _your_answer_line(user_answer: str, *, strike: bool) -> AnswerLine:
+        """Строка «Ваш ответ»; `strike=True` — зачёркнуть значение (как неверное)."""
+        return AnswerLine(label="Ваш ответ", values=[user_answer], strike=strike)
 
     def _gap_fragment(self, text: str, word: str, *, summary: str = "Фрагмент текста") -> Collapsible:
         """Свёрнутый блок с фрагментом текста, где в пропуск вставлен подсвеченный ответ."""

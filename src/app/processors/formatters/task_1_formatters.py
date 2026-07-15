@@ -30,6 +30,6 @@ class Task1Formatter(BaseFormatter):
         return ResultView(
             correct=is_correct,
             answer=self._answer_line(correct_answers, stripped, is_correct=is_correct),
-            wrong_answer=None if is_correct else self._your_answer_line(stripped),
+            wrong_answer=None if is_correct else self._your_answer_line(stripped, strike=True),
             blocks=[self._gap_fragment(content.text, inserted)],
         )
