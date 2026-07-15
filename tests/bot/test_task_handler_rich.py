@@ -38,3 +38,18 @@ async def test_send_new_task_uses_send_message_when_no_view():
     await send_new_task(_user(cat), task_service, mm)
     mm.send_message.assert_called_once()
     mm.send_rich.assert_not_called()
+
+
+async def test_send_new_task_falls_back_to_html_when_send_rich_fails():
+    cat = CategoryDTO(id=1, name="Cat", handler_type=HandlerType.TASK_1_DRILL, parent_id=5)
+    mm = AsyncMock()
+    mm.send_rich.side_effect = RuntimeError("boom")
+    task_service = AsyncMock()
+    task_service.start_task.return_value = TaskUI(
+        text="fallback",
+        view=TaskView(heading="Задание 1", instruction="i", blocks=[Quote(lines=["x"])]),
+    )
+    result = await send_new_task(_user(cat), task_service, mm)
+    assert result == 1
+    mm.send_rich.assert_called_once()
+    mm.send_message.assert_called_once()

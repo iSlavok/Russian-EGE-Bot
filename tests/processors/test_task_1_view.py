@@ -58,6 +58,7 @@ class TestTask1View:
         assert out.startswith("**✅ Верно**")
         assert "<u>например</u>" in out
         assert "<details><summary>Фрагмент текста</summary>" in out
+        assert "<u><b>например</b></u>" in out
 
     async def test_process_answer_wrong_opens_fragment(
         self, processor_factory, user_factory, category_factory, exercise_factory,
@@ -71,3 +72,4 @@ class TestTask1View:
         out = render_result(result.result_view)
         assert out.startswith("**❌ Неверно**\n\n**Ваш ответ:** ~~поэтому~~")
         assert "<details open><summary>Фрагмент текста</summary>" in out
+        assert "<u><b>в частности</b></u>" in out

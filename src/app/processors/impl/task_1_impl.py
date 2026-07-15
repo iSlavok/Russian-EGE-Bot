@@ -68,11 +68,13 @@ class Task1DrillProcessor(BaseTaskProcessor):
             explanation = f"Ваш ответ: {html.escape(user_answer, quote=False)}\n" + explanation
 
         label_ok = "Ответ" if len(correct_answers) == 1 else "Ответы"
-        frag = Collapsible(
-            summary="Фрагмент текста",
-            blocks=[Quote(lines=[exercise.explanation or ""])],
-            open_if_wrong=True,
+        gap = "< . . . >"
+        inserted = user_answer.strip() if is_correct else correct_answers[0]
+        frag_parts = content.text.split(gap)
+        frag_line = f"<u><b>{html.escape(inserted, quote=False)}</b></u>".join(
+            html.escape(p, quote=False) for p in frag_parts
         )
+        frag = Collapsible(summary="Фрагмент текста", blocks=[Quote(lines=[frag_line])], open_if_wrong=True)
         if is_correct:
             result_answer = AnswerLine(label=label_ok, values=correct_answers, user=user_answer.strip())
             wrong_line = None

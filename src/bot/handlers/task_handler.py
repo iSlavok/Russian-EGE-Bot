@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NoCategoryError, NoHandlerTypeError
 from app.rendering.rich_renderer import render_result, render_task
-from app.schemas import UserWithExercisesDTO
+from app.schemas import CheckResult, UserWithExercisesDTO
 from app.services.category_service import CategoryService
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
@@ -32,6 +32,20 @@ async def _send_result(message_manager: MessageManager, text: str, *, use_edit: 
         else:
             await message_manager.send_message(text=parts[0])
         await message_manager.send_message(text=parts[1], clear_previous=False)
+
+
+async def _send_check_result(message_manager: MessageManager, result: CheckResult, *, use_edit: bool) -> None:
+    if result.result_view is not None:
+        try:
+            await message_manager.send_rich(render_result(result.result_view), clear_previous=True)
+        except Exception:
+            logger.exception("rich result send failed; falling back to HTML")
+        else:
+            return
+    response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
+    if result.explanation:
+        response_text += f"\n\n{result.explanation}"
+    await _send_result(message_manager, response_text, use_edit=use_edit)
 
 
 @router.callback_query(GetTaskCallbackData.filter())
@@ -73,8 +87,12 @@ async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, m
     ) if task.options else get_back_keyboard(back_category_id=back_category_id)
     if task.view is not None:
         markup = keyboard
-        await message_manager.send_rich(render_task(task.view), reply_markup=markup, clear_previous=False)
-        return 1
+        try:
+            await message_manager.send_rich(render_task(task.view), reply_markup=markup, clear_previous=False)
+        except Exception:
+            logger.exception("rich task send failed; falling back to HTML")
+        else:
+            return 1
     if task.text_continuation:
         await message_manager.send_message(text=task.text, clear_previous=False)
         await message_manager.send_message(
@@ -103,13 +121,7 @@ async def submit_answer_button(
     await message_manager.clear_messages(keep_bot_last=1)
     logger.debug("User {} submitted button answer: '{}'", user.id, callback_data.answer)
     result = await task_service.check_answer(user, callback_data.answer)
-    if result.result_view is not None:
-        await message_manager.send_rich(render_result(result.result_view), clear_previous=True)
-    else:
-        response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
-        if result.explanation:
-            response_text += f"\n\n{result.explanation}"
-        await _send_result(message_manager, response_text, use_edit=True)
+    await _send_check_result(message_manager, result, use_edit=True)
     await send_new_task(user, task_service, message_manager)
     await session.commit()
     await callback_query.answer()
@@ -132,12 +144,6 @@ async def submit_answer(
     await message_manager.clear_messages(keep_bot_last=1)
     logger.debug("User {} submitted text answer: '{}'", user.id, message.text)
     result = await task_service.check_answer(user, message.text)
-    if result.result_view is not None:
-        await message_manager.send_rich(render_result(result.result_view), clear_previous=True)
-    else:
-        response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
-        if result.explanation:
-            response_text += f"\n\n{result.explanation}"
-        await _send_result(message_manager, response_text, use_edit=False)
+    await _send_check_result(message_manager, result, use_edit=False)
     await send_new_task(user, task_service, message_manager)
     await session.commit()

@@ -17,10 +17,14 @@ def build_rich_payload(chat_id: int, markdown: str, reply_markup: dict | None) -
 
 
 async def _call(bot: Bot, method: str, payload: dict) -> dict:
-    url = f"https://api.telegram.org/bot{bot.token}/{method}"
+    url = bot.session.api.api_url(token=bot.token, method=method)
     async with aiohttp.ClientSession() as session, session.post(
         url, data=json.dumps(payload), headers={"Content-Type": "application/json"},
     ) as resp:
+        if resp.status != 200:  # noqa: PLR2004
+            text = (await resp.text())[:200]
+            msg = f"{method} HTTP {resp.status}: {text}"
+            raise RuntimeError(msg)
         return await resp.json()
 
 
