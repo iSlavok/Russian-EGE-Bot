@@ -2,10 +2,10 @@ import random
 
 from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task2324Formatter
 from app.processors.schemas import Task2324Config, Task2324Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
-from app.utils import split_html_text
 
 _ALL_DIGITS = frozenset("12345")
 
@@ -25,9 +25,7 @@ def _pick_mode(correct_digits: str) -> bool:
 
 
 class _Task2324BaseProcessor(BaseTaskProcessor):
-    _CORRECT_FORMULATION: str = ""
-    _INCORRECT_FORMULATION: str = ""
-    _OPTIONS_LABEL: str = ""
+    _formatter: Task2324Formatter
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
@@ -35,20 +33,12 @@ class _Task2324BaseProcessor(BaseTaskProcessor):
 
         content = Task2324Content.model_validate(exercise.content)
         ask_incorrect = _pick_mode(exercise.answer)
-        formulation = self._INCORRECT_FORMULATION if ask_incorrect else self._CORRECT_FORMULATION
-
-        options_text = "\n".join(f"{i + 1}. {opt}" for i, opt in enumerate(content.options))
-        task_text = (
-            f"{formulation}\n\n"
-            f"<b>Текст:</b>\n<blockquote expandable>{content.text}</blockquote>\n\n"
-            f"{options_text}"
-        )
-
-        parts = split_html_text(task_text)
-        continuation = parts[1] if len(parts) == 2 else None  # noqa: PLR2004
 
         return TaskResponse(
-            task_ui=TaskUI(text=parts[0], text_continuation=continuation, options=None),
+            task_ui=TaskUI(
+                view=self._formatter.condition(ask_incorrect=ask_incorrect, text=content.text, options=content.options),
+                options=None,
+            ),
             exercise_ids=exercise.id,
             task_config=Task2324Config(
                 correct_digits=exercise.answer,
@@ -74,48 +64,28 @@ class _Task2324BaseProcessor(BaseTaskProcessor):
         solve_time = self._compute_solve_time(user)
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
-        if is_correct:
-            header = f"<b>Ответ:</b> {target_str}"
-        else:
-            header = (
-                f"<b>Ваш ответ:</b> {user_str}\n"
-                f"<b>Правильный ответ:</b> {target_str}"
-            )
-
         content = Task2324Content.model_validate(exercise.content)
-
-        explanation = header
-        if exercise.explanation:
-            explanation += (
-                f"\n\n<b>Объяснение:</b>\n<blockquote expandable>{exercise.explanation}</blockquote>"
-            )
-        explanation += (f"\n\n<b>{self._OPTIONS_LABEL}:</b>\n<blockquote expandable>" + "\n".join(
-            f"{i + 1}. {opt}" for i, opt in enumerate(content.options)
-        ) + "</blockquote>")
-        explanation += f"\n\n<b>Текст:</b>\n<blockquote expandable>{content.text}</blockquote>"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.result(
+                correct_answer=target_str,
+                user_answer=user_str,
+                text=content.text,
+                options=content.options,
+                explanation=exercise.explanation or "",
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task23ExamProcessor(_Task2324BaseProcessor):
     """Задание 23 — утверждения о содержании текста."""
 
-    _CORRECT_FORMULATION = (
-        "Какие из высказываний соответствуют содержанию текста? Укажите номера ответов."
-    )
-    _INCORRECT_FORMULATION = (
-        "Какие из высказываний <b>не соответствуют</b> содержанию текста? Укажите номера ответов."
-    )
-    _OPTIONS_LABEL = "Высказывания"
+    _formatter = Task2324Formatter(23)
 
 
 class Task24ExamProcessor(_Task2324BaseProcessor):
     """Задание 24 — утверждения о структуре и языковых особенностях текста."""
 
-    _CORRECT_FORMULATION = (
-        "Какие из перечисленных утверждения являются верными? Укажите номера ответов."
-    )
-    _INCORRECT_FORMULATION = (
-        "Какие из перечисленных утверждения являются <b>ошибочными</b>? Укажите номера ответов."
-    )
-    _OPTIONS_LABEL = "Утверждения"
+    _formatter = Task2324Formatter(24)
