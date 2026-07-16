@@ -53,7 +53,8 @@ class Task4Formatter(BaseFormatter):
             instruction=f"Выберите правильное ударение в слове: **{phrase}**.",
         )
 
-    def drill_result(self, explanation: str, *, is_correct: bool) -> ResultView:
+    @staticmethod
+    def drill_result(explanation: str, *, is_correct: bool) -> ResultView:
         return ResultView(correct=is_correct, blocks=[Paragraph(text=explanation)])
 
     def _word_display(self, content: Task4Content, stress_index: int) -> str:

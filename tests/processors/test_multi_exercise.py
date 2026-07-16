@@ -208,7 +208,8 @@ class TestTask5DrillProcessor:
         processor = processor_factory.get_processor(HandlerType.TASK_5_DRILL)
         result = await processor.process_answer(dto, "1")
         assert result.is_correct is True
-        assert "дипломатичным" in result.explanation.lower()
+        assert result.result_view is not None
+        assert "дипломатичным" in RichRenderer().render_result(result.result_view).lower()
 
 
 # ===================================================================
