@@ -1,87 +1,10 @@
 from app.exceptions import NoCurrentExercisesError, TaskForUserNotFoundError
 from app.processors import BaseTaskProcessor
-from app.processors.schemas.task_21_schemas import (
-    Task21ColonRule,
-    Task21CommaRule,
-    Task21DashRule,
-    Task21DrillContent,
-    Task21ExamContent,
-    Task21TaskType,
-)
-from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
+from app.processors.formatters import Task21Formatter
+from app.processors.schemas.task_21_schemas import Task21DrillContent, Task21ExamContent
+from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import extract_sorted_digits
-
-DRILL_OPTIONS_PER_ROW: dict[Task21TaskType, int | list[int]] = {
-    Task21TaskType.COMMA: [1, 1, 1, 1, 2, 2, 2, 2, 2],
-    Task21TaskType.DASH:  [1, 1, 1, 1, 2, 2],
-    Task21TaskType.COLON: [1, 2],
-}
-
-_DRILL_FORMULATION: dict[Task21TaskType, str] = {
-    Task21TaskType.COMMA: "По какому правилу в этом предложении ставится запятая?",
-    Task21TaskType.DASH:  "По какому правилу в этом предложении ставится тире?",
-    Task21TaskType.COLON: "По какому правилу в этом предложении ставится двоеточие?",
-}
-
-_EXAM_FORMULATION: dict[Task21TaskType, str] = {
-    Task21TaskType.COMMA: (
-        "Найдите предложения, в которых запятая(-ые) ставится(-ятся) в соответствии с одним и тем же правилом "
-        "пунктуации. Запишите номера этих предложений."
-    ),
-    Task21TaskType.DASH: (
-        "Найдите предложения, в которых тире ставится в соответствии с одним и тем же правилом пунктуации. "
-        "Запишите номера этих предложений."
-    ),
-    Task21TaskType.COLON: (
-        "Найдите предложения, в которых двоеточие ставится в соответствии с одним и тем же правилом пунктуации. "
-        "Запишите номера этих предложений."
-    ),
-}
-
-_COMMA_RULE_NAMES: dict[Task21CommaRule, str] = {
-    Task21CommaRule.MODIFIER:      "Обособленное определение",
-    Task21CommaRule.ADVERBIAL:     "Обособленное обстоятельство",
-    Task21CommaRule.SUPPLEMENT:    "Обособленное дополнение",
-    Task21CommaRule.COMPARISON:    "Сравнительный оборот",
-    Task21CommaRule.HOMOGENEOUS:   "Однородные члены",
-    Task21CommaRule.APPOSITION:    "Приложение",
-    Task21CommaRule.CLARIFICATION: "Уточнение",
-    Task21CommaRule.SSP:           "ССП",
-    Task21CommaRule.SPP:           "СПП",
-    Task21CommaRule.BSP:           "БСП",
-    Task21CommaRule.VOCATIVE:      "Обращение",
-    Task21CommaRule.PARENTHETICAL: "Вводные слова",
-    Task21CommaRule.INTERJECTION:  "Междометие",
-    Task21CommaRule.DIRECT_SPEECH: "Прямая речь",
-}
-
-_DASH_RULE_NAMES: dict[Task21DashRule, str] = {
-    Task21DashRule.SUBJ_PRED:     "Подлежащее и сказуемое",
-    Task21DashRule.INCOMPLETE:    "Неполное предложение",
-    Task21DashRule.INSERTION:     "Вставная конструкция",
-    Task21DashRule.HOMOGENEOUS:   "Однородные члены",
-    Task21DashRule.DIRECT_SPEECH: "Прямая речь",
-    Task21DashRule.APPOSITION:    "Приложение",
-    Task21DashRule.CLARIFICATION: "Уточнение",
-    Task21DashRule.BSP:           "БСП",
-}
-
-_COLON_RULE_NAMES: dict[Task21ColonRule, str] = {
-    Task21ColonRule.HOMOGENEOUS:   "Однородные члены",
-    Task21ColonRule.BSP:           "БСП",
-    Task21ColonRule.DIRECT_SPEECH: "Прямая речь",
-}
-
-_RULE_NAMES_BY_TYPE: dict[Task21TaskType, dict] = {
-    Task21TaskType.COMMA: _COMMA_RULE_NAMES,
-    Task21TaskType.DASH:  _DASH_RULE_NAMES,
-    Task21TaskType.COLON: _COLON_RULE_NAMES,
-}
-
-
-def _rule_name(task_type: Task21TaskType, rule: str) -> str:
-    return _RULE_NAMES_BY_TYPE[task_type].get(rule, rule)
 
 
 class Task21DrillProcessor(BaseTaskProcessor):
@@ -91,18 +14,19 @@ class Task21DrillProcessor(BaseTaskProcessor):
     Ответ — одно правило (например, SUBJ_PRED).
     """
 
+    _formatter = Task21Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
         exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task21DrillContent.model_validate(exercise.content)
-        rule_names = _RULE_NAMES_BY_TYPE[content.task_type]
-
-        task_text = f"{_DRILL_FORMULATION[content.task_type]}\n\n<i>{content.text}</i>"
-        options = [TaskOption(text=name, value=rule.value) for rule, name in rule_names.items()]
-
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=options, options_per_row=DRILL_OPTIONS_PER_ROW[content.task_type]),
+            task_ui=TaskUI(
+                view=self._formatter.drill_condition(task_type=content.task_type, text=content.text),
+                options=self._formatter.drill_options(content.task_type),
+                options_per_row=self._formatter.drill_options_per_row(content.task_type),
+            ),
             exercise_ids=exercise.id,
         )
 
@@ -117,20 +41,18 @@ class Task21DrillProcessor(BaseTaskProcessor):
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task21DrillContent.model_validate(exercise.content)
-        correct_name = _rule_name(content.task_type, exercise.answer)
-
-        if is_correct:
-            explanation = f"<b>Ответ:</b> {correct_name}"
-        else:
-            user_name = _rule_name(content.task_type, user_answer)
-            explanation = (
-                f"<b>Ваш ответ:</b> {user_name}\n"
-                f"<b>Правильный ответ:</b> {correct_name}"
-            )
-
-        explanation += f"\n\n<i>{content.text}</i>\n\n{exercise.explanation}"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.drill_result(
+                task_type=content.task_type,
+                answer=exercise.answer,
+                user_answer=user_answer,
+                text=content.text,
+                explanation=exercise.explanation or "",
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task21ExamProcessor(BaseTaskProcessor):
@@ -139,6 +61,8 @@ class Task21ExamProcessor(BaseTaskProcessor):
     Показывает текст из нескольких пронумерованных предложений.
     Пользователь вводит номера предложений, где знак стоит по одному правилу.
     """
+
+    _formatter = Task21Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
@@ -150,10 +74,11 @@ class Task21ExamProcessor(BaseTaskProcessor):
         exercise = exercises[0]
 
         content = Task21ExamContent.model_validate(exercise.content)
-        task_text = f"{_EXAM_FORMULATION[content.task_type]}\n\n<i>{content.full_text}</i>"
-
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=None),
+            task_ui=TaskUI(
+                view=self._formatter.condition(task_type=content.task_type, full_text=content.full_text),
+                options=None,
+            ),
             exercise_ids=exercise.id,
         )
 
@@ -169,18 +94,16 @@ class Task21ExamProcessor(BaseTaskProcessor):
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task21ExamContent.model_validate(exercise.content)
-        rule_name = _rule_name(content.task_type, content.answer_rule)
-
-        if is_correct:
-            explanation = f"<b>Ответ:</b> {exercise.answer} — {rule_name}"
-        else:
-            explanation = (
-                f"<b>Ваш ответ:</b> {user_digits or '—'}\n"
-                f"<b>Правильный ответ:</b> {exercise.answer} — {rule_name}"
-            )
-
-        explanation += f"\n\n<b>Текст:</b>\n<blockquote expandable>{content.full_text}</blockquote>"
-
-        explanation += f"\n\n<b>Объяснение:</b>\n<blockquote expandable>{exercise.explanation}</blockquote>"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.result(
+                task_type=content.task_type,
+                answer=exercise.answer,
+                answer_rule=content.answer_rule,
+                user_answer=user_digits,
+                full_text=content.full_text,
+                explanation=exercise.explanation or "",
+                is_correct=is_correct,
+            ),
+        )
