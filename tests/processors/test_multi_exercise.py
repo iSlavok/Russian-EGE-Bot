@@ -956,7 +956,7 @@ class TestTask14ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_14_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
         assert len(result.exercise_ids) == 5
 

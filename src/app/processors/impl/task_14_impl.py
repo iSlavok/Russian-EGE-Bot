@@ -8,6 +8,7 @@ from app.exceptions import (
     TaskForUserNotFoundError,
 )
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task14Formatter, Task14Sentence
 from app.processors.schemas import Task14DrillContent, Task14ExamConfig, Task14ExamContent
 from app.repositories.exercise_filters import answer_eq, answer_ne
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
@@ -17,21 +18,13 @@ from app.utils import extract_sorted_digits
 EXAM_SENTENCES = 5
 
 TYPE_WEIGHTS = [4, 4, 1]
-
 CORRECT_COUNT_WEIGHTS = [4, 4, 1]
 
 _TOGETHER = "TOGETHER"
 _SEPARATE = "SEPARATE"
 _HYPHEN = "HYPHEN"
-_MIXED = "MIXED"
 
 _TASK_TYPES = [_TOGETHER, _SEPARATE, _HYPHEN]
-
-_ANSWER_DISPLAY = {
-    _TOGETHER: "слитно",
-    _SEPARATE: "раздельно",
-    _HYPHEN: "через дефис",
-}
 
 
 class Task14DrillProcessor(BaseTaskProcessor):
@@ -41,17 +34,13 @@ class Task14DrillProcessor(BaseTaskProcessor):
     Три кнопки: слитно / раздельно / через дефис.
     """
 
+    _formatter = Task14Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
         exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task14DrillContent.model_validate(exercise.content)
-
-        task_text = (
-            "Определите написание слова в скобках.\n\n"
-            f"<i>{content.sentence}</i>"
-        )
-
         options = [
             TaskOption(text="Слитно", value=_TOGETHER),
             TaskOption(text="Раздельно", value=_SEPARATE),
@@ -59,7 +48,7 @@ class Task14DrillProcessor(BaseTaskProcessor):
         ]
 
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=options),
+            task_ui=TaskUI(view=self._formatter.drill_condition(content.sentence), options=options),
             exercise_ids=exercise.id,
         )
 
@@ -74,24 +63,17 @@ class Task14DrillProcessor(BaseTaskProcessor):
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task14DrillContent.model_validate(exercise.content)
-        correct_display = _ANSWER_DISPLAY[exercise.answer]
-
-        if is_correct:
-            explanation = (
-                f"<b>Ответ:</b> {correct_display}\n\n"
-                f"<i>{content.sentence}</i>\n\n"
-                f"{exercise.explanation}"
-            )
-        else:
-            user_display = _ANSWER_DISPLAY.get(user_answer, user_answer)
-            explanation = (
-                f"<b>Ваш ответ:</b> {user_display}\n"
-                f"<b>Правильный ответ:</b> {correct_display}\n\n"
-                f"<i>{content.sentence}</i>\n\n"
-                f"{exercise.explanation}"
-            )
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.drill_result(
+                sentence=content.sentence,
+                answer=exercise.answer,
+                user_answer=user_answer,
+                explanation=exercise.explanation or "",
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task14ExamProcessor(BaseTaskProcessor):
@@ -99,14 +81,9 @@ class Task14ExamProcessor(BaseTaskProcessor):
 
     Показывает 5 предложений с двумя скобками в каждом.
     Пользователь вводит номера предложений, где оба слова пишутся указанным образом.
-
-    Логика подбора:
-      1. Выбирается целевой тип (TOGETHER/SEPARATE/HYPHEN) с весами 4:4:1.
-      2. Выбирается количество правильных предложений (2/3/4) с весами 4:4:1.
-      3. «Правильные» — упражнения с answer == target_type.
-      4. «Неправильные» — упражнения с answer != target_type (MIXED или другой тип),
-         по одному от каждого доступного неправильного типа, затем случайный выбор нужного кол-ва.
     """
+
+    _formatter = Task14Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
@@ -122,14 +99,12 @@ class Task14ExamProcessor(BaseTaskProcessor):
             limit=correct_count,
             filters=[answer_eq(answer_type)],
         ))
-
         wrong_exs = list(await self._exercise_selector.select_smart_by_group(
             category_id=category_id,
             user_id=user.id,
             limit=wrong_count,
             filters=[answer_ne(answer_type)],
         ))
-
         if len(correct_exs) < correct_count or len(wrong_exs) < wrong_count:
             raise TaskForUserNotFoundError(user.id)
 
@@ -137,27 +112,20 @@ class Task14ExamProcessor(BaseTaskProcessor):
         random.shuffle(all_exs)
 
         correct_indices = [i for i, ex in enumerate(all_exs) if ex.answer == answer_type]
-        answer_display = _ANSWER_DISPLAY[answer_type]
-
-        task_text = (
-            f"Укажите варианты ответов, в которых оба выделенных слова пишутся "
-            f"<b>{answer_display.upper()}</b>. Запишите номера ответов.\n\n"
-        )
-        for i, ex in enumerate(all_exs, start=1):
-            content = Task14ExamContent.model_validate(ex.content)
-            task_text += f"{i}) {content.sentence}\n"
+        sentences = [Task14ExamContent.model_validate(ex.content).sentence for ex in all_exs]
 
         exercise_ids = [ex.id for ex in all_exs]
-        config = Task14ExamConfig(
-            exercise_ids=exercise_ids,
-            correct_indices=correct_indices,
-            answer_type=answer_type,
-        )
-
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=None),
+            task_ui=TaskUI(
+                view=self._formatter.condition(answer_type=answer_type, sentences=sentences),
+                options=None,
+            ),
             exercise_ids=exercise_ids,
-            task_config=config,
+            task_config=Task14ExamConfig(
+                exercise_ids=exercise_ids,
+                correct_indices=correct_indices,
+                answer_type=answer_type,
+            ),
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
@@ -174,31 +142,29 @@ class Task14ExamProcessor(BaseTaskProcessor):
 
         solve_time = self._compute_solve_time(user)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
-
         group_id = uuid.uuid4()
-        details = ""
 
+        sentences: list[Task14Sentence] = []
         for i, ex in enumerate(ordered_exercises):
-            sentence_num = i + 1
             is_correct_sentence = i in config.correct_indices
-            user_selected = str(sentence_num) in user_digits
+            user_selected = str(i + 1) in user_digits
             sentence_right = user_selected == is_correct_sentence
 
             content = Task14ExamContent.model_validate(ex.content)
-
-            details += f"<b>{sentence_num})</b> <i>{content.sentence}</i>\n"
-            details += f"{ex.explanation}\n\n"
-
+            sentences.append(Task14Sentence(
+                corrected_sentence=content.corrected_sentence,
+                explanation=ex.explanation or "",
+                wrong=not sentence_right,
+            ))
             self._record_answer(user, ex.id, sentence_right, user_answer, solve_time, group_id)
 
-        if is_correct:
-            explanation = f"<b>Ответ: {correct_answer}</b>"
-        else:
-            explanation = (
-                f"Ваш ответ: {user_digits}\n"
-                f"<b>Правильный ответ: {correct_answer}</b>"
-            )
-
-        explanation += f"\n\n<b>Объяснение:</b>\n<blockquote expandable>{details}</blockquote>"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.result(
+                correct_answer=correct_answer,
+                user_answer=user_digits,
+                sentences=sentences,
+                is_correct=is_correct,
+            ),
+        )
