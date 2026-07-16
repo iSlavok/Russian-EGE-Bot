@@ -8,6 +8,7 @@ from app.exceptions import (
     TaskForUserNotFoundError,
 )
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task16Formatter, Task16Sentence
 from app.processors.schemas import Task16Content, Task16ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
@@ -26,21 +27,21 @@ class Task16DrillProcessor(BaseTaskProcessor):
     Кнопки 0–7 — количество запятых, которые нужно поставить.
     """
 
+    _formatter = Task16Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
         exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task16Content.model_validate(exercise.content)
-
-        task_text = (
-            "Сколько запятых нужно поставить в предложении?\n\n"
-            f"<i>{content.sentence}</i>"
-        )
-
         options = [TaskOption(text=str(i), value=str(i)) for i in range(8)]
 
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=options, options_per_row=4),
+            task_ui=TaskUI(
+                view=self._formatter.drill_condition(content.sentence),
+                options=options,
+                options_per_row=4,
+            ),
             exercise_ids=exercise.id,
         )
 
@@ -55,22 +56,17 @@ class Task16DrillProcessor(BaseTaskProcessor):
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task16Content.model_validate(exercise.content)
-
-        if is_correct:
-            explanation = (
-                f"<b>Ответ:</b> {exercise.answer}\n\n"
-                f"<i>{content.corrected_sentence}</i>\n\n"
-                f"{exercise.explanation}"
-            )
-        else:
-            explanation = (
-                f"<b>Ваш ответ:</b> {user_answer}\n"
-                f"<b>Правильный ответ:</b> {exercise.answer}\n\n"
-                f"<i>{content.corrected_sentence}</i>\n\n"
-                f"{exercise.explanation}"
-            )
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.drill_result(
+                answer=exercise.answer,
+                user_answer=user_answer,
+                corrected_sentence=content.corrected_sentence,
+                explanation=exercise.explanation or "",
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task16ExamProcessor(BaseTaskProcessor):
@@ -79,6 +75,8 @@ class Task16ExamProcessor(BaseTaskProcessor):
     Показывает 5 предложений без запятых, из которых 2–4 требуют ровно одной запятой.
     Пользователь вводит номера предложений, в которых нужна ОДНА запятая.
     """
+
+    _formatter = Task16Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
@@ -98,7 +96,6 @@ class Task16ExamProcessor(BaseTaskProcessor):
             exclude=_ANSWER_ONE,
             limit=wrong_count,
         ))
-
         if len(correct_exs) < correct_count or len(wrong_exs) < wrong_count:
             raise TaskForUserNotFoundError(user.id)
 
@@ -106,25 +103,13 @@ class Task16ExamProcessor(BaseTaskProcessor):
         random.shuffle(all_exs)
 
         correct_indices = [i for i, ex in enumerate(all_exs) if ex.answer == _ANSWER_ONE]
-
-        task_text = (
-            "Укажите предложения, в которых нужно поставить <b>ОДНУ</b> запятую. "
-            "Запишите номера этих предложений.\n\n"
-        )
-        for i, ex in enumerate(all_exs, start=1):
-            content = Task16Content.model_validate(ex.content)
-            task_text += f"{i}) {content.sentence}\n"
+        sentences = [Task16Content.model_validate(ex.content).sentence for ex in all_exs]
 
         exercise_ids = [ex.id for ex in all_exs]
-        config = Task16ExamConfig(
-            exercise_ids=exercise_ids,
-            correct_indices=correct_indices,
-        )
-
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=None),
+            task_ui=TaskUI(view=self._formatter.condition(sentences), options=None),
             exercise_ids=exercise_ids,
-            task_config=config,
+            task_config=Task16ExamConfig(exercise_ids=exercise_ids, correct_indices=correct_indices),
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
@@ -141,32 +126,29 @@ class Task16ExamProcessor(BaseTaskProcessor):
 
         solve_time = self._compute_solve_time(user)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
-
         group_id = uuid.uuid4()
-        details = ""
 
+        sentences: list[Task16Sentence] = []
         for i, ex in enumerate(ordered_exercises):
-            sentence_num = i + 1
             is_correct_sentence = i in config.correct_indices
-            user_selected = str(sentence_num) in user_digits
+            user_selected = str(i + 1) in user_digits
             sentence_right = user_selected == is_correct_sentence
 
             content = Task16Content.model_validate(ex.content)
-            details += (
-                f"<b>{sentence_num})</b> <i>{content.corrected_sentence}</i>\n"
-                f"{ex.explanation}\n\n"
-            )
-
+            sentences.append(Task16Sentence(
+                corrected_sentence=content.corrected_sentence,
+                explanation=ex.explanation or "",
+                wrong=not sentence_right,
+            ))
             self._record_answer(user, ex.id, sentence_right, user_answer, solve_time, group_id)
 
-        if is_correct:
-            explanation = f"<b>Ответ: {correct_answer}</b>"
-        else:
-            explanation = (
-                f"Ваш ответ: {user_digits}\n"
-                f"<b>Правильный ответ: {correct_answer}</b>"
-            )
-
-        explanation += f"\n\n<b>Объяснения:</b>\n<blockquote expandable>{details}</blockquote>"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            explanation=None,
+            result_view=self._formatter.result(
+                correct_answer=correct_answer,
+                user_answer=user_digits,
+                sentences=sentences,
+                is_correct=is_correct,
+            ),
+        )
