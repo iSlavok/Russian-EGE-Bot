@@ -12,6 +12,7 @@ from .task_13_formatters import Task13Formatter, Task13Sentence
 from .task_14_formatters import Task14Formatter, Task14Sentence
 from .task_15_formatters import Task15Formatter
 from .task_16_formatters import Task16Formatter, Task16Sentence
+from .task_17_20_formatters import TaskN17N20Formatter
 
 __all__ = [
     "BaseFormatter",
@@ -34,4 +35,5 @@ __all__ = [
     "Task16Formatter",
     "Task16Sentence",
     "TaskN9N12Formatter",
+    "TaskN17N20Formatter",
 ]
