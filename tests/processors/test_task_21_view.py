@@ -1,6 +1,6 @@
 """Юнит-тесты форматтера задания 21 (чистый, без БД): exam + drill."""
-from app.processors.formatters import Task21Formatter
-from app.processors.schemas.task_21_schemas import Task21TaskType
+from app.processors.tasks.task_21 import Task21Formatter
+from app.processors.tasks.task_21 import Task21TaskType
 from app.rendering.rich_renderer import RichRenderer
 
 _F = Task21Formatter()

@@ -1,5 +1,5 @@
 """Юнит-тесты форматтера заданий 9–12 (чистый, без БД): exam + drill."""
-from app.processors.formatters import N9N12Row, N9N12Word, TaskN9N12Formatter
+from app.processors.tasks.task_09_12 import N9N12Row, N9N12Word, TaskN9N12Formatter
 from app.rendering.rich_renderer import RichRenderer
 
 _F9 = TaskN9N12Formatter(9)

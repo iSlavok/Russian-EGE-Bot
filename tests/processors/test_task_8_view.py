@@ -1,5 +1,5 @@
 """Юнит-тесты форматтера задания 8 (чистый, без БД): exam + drill."""
-from app.processors.formatters import Task8Formatter, Task8Letter
+from app.processors.tasks.task_08 import Task8Formatter, Task8Letter
 from app.rendering.rich_renderer import RichRenderer
 
 _F = Task8Formatter()

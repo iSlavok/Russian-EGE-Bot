@@ -1,6 +1,6 @@
 """Юнит-тесты форматтера задания 4 (чистый, без БД): exam + drill."""
-from app.processors.formatters import Task4Formatter
-from app.processors.schemas import Task4Content
+from app.processors.tasks.task_04 import Task4Formatter
+from app.processors.tasks.task_04 import Task4Content
 from app.rendering.rich_renderer import RichRenderer
 
 _F = Task4Formatter()

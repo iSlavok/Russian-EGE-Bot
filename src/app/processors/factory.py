@@ -2,22 +2,17 @@ from loguru import logger
 
 from app.enums import HandlerType
 from app.exceptions import ProcessorNotFoundError
-from app.processors.base_processor import TaskProcessor
-from app.processors.impl import (
-    SkipProcessor,
-    SoonProcessor,
-    Task1DrillProcessor,
-    Task2DrillProcessor,
-    Task3ExamProcessor,
-    Task4DrillProcessor,
-    Task4ExamProcessor,
-    Task5DrillProcessor,
-    Task5ExamProcessor,
-    Task6ExamProcessor,
-    Task7DrillProcessor,
-    Task7ExamProcessor,
-    Task8DrillProcessor,
-    Task8ExamProcessor,
+from app.processors._base.interface import TaskProcessor
+from app.processors.tasks.generic import SkipProcessor, SoonProcessor
+from app.processors.tasks.task_01 import Task1DrillProcessor
+from app.processors.tasks.task_02 import Task2DrillProcessor
+from app.processors.tasks.task_03 import Task3ExamProcessor
+from app.processors.tasks.task_04 import Task4DrillProcessor, Task4ExamProcessor
+from app.processors.tasks.task_05 import Task5DrillProcessor, Task5ExamProcessor
+from app.processors.tasks.task_06 import Task6ExamProcessor
+from app.processors.tasks.task_07 import Task7DrillProcessor, Task7ExamProcessor
+from app.processors.tasks.task_08 import Task8DrillProcessor, Task8ExamProcessor
+from app.processors.tasks.task_09_12 import (
     Task9DrillProcessor,
     Task9ExamProcessor,
     Task10DrillProcessor,
@@ -26,27 +21,22 @@ from app.processors.impl import (
     Task11ExamProcessor,
     Task12DrillProcessor,
     Task12ExamProcessor,
-    Task13DrillProcessor,
-    Task13ExamProcessor,
-    Task14DrillProcessor,
-    Task14ExamProcessor,
-    Task15DrillProcessor,
-    Task15ExamProcessor,
-    Task16DrillProcessor,
-    Task16ExamProcessor,
+)
+from app.processors.tasks.task_13 import Task13DrillProcessor, Task13ExamProcessor
+from app.processors.tasks.task_14 import Task14DrillProcessor, Task14ExamProcessor
+from app.processors.tasks.task_15 import Task15DrillProcessor, Task15ExamProcessor
+from app.processors.tasks.task_16 import Task16DrillProcessor, Task16ExamProcessor
+from app.processors.tasks.task_17_20 import (
     Task17ExamProcessor,
     Task18ExamProcessor,
     Task19ExamProcessor,
     Task20ExamProcessor,
-    Task21DrillProcessor,
-    Task21ExamProcessor,
-    Task22DrillProcessor,
-    Task22ExamProcessor,
-    Task23ExamProcessor,
-    Task24ExamProcessor,
-    Task25ExamProcessor,
-    Task26ExamProcessor,
 )
+from app.processors.tasks.task_21 import Task21DrillProcessor, Task21ExamProcessor
+from app.processors.tasks.task_22 import Task22DrillProcessor, Task22ExamProcessor
+from app.processors.tasks.task_23_24 import Task23ExamProcessor, Task24ExamProcessor
+from app.processors.tasks.task_25 import Task25ExamProcessor
+from app.processors.tasks.task_26 import Task26ExamProcessor
 from app.repositories import ExerciseRepository, UserAnswerRepository
 from app.services.exercise_selector import ExerciseSelector
 
