@@ -1,5 +1,5 @@
-import html
 import random
+from collections.abc import Sequence
 
 from app.exceptions import (
     InvalidExerciseCountError,
@@ -8,9 +8,18 @@ from app.exceptions import (
     NoCurrentExercisesError,
     TaskForUserNotFoundError,
 )
+from app.models import Exercise
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task7Formatter
 from app.processors.schemas import Task7Content, Task7ExamConfig
-from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
+from app.schemas import (
+    CheckResult,
+    ExerciseDTO,
+    TaskOption,
+    TaskResponse,
+    TaskUI,
+    UserWithExercisesDTO,
+)
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import check_answer
 
@@ -23,6 +32,8 @@ class Task7DrillProcessor(BaseTaskProcessor):
     Показывает одну фразу с двумя вариантами ответа в кнопках.
     Используются только упражнения, где incorrect_answer не null.
     """
+
+    _formatter = Task7Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
@@ -38,26 +49,19 @@ class Task7DrillProcessor(BaseTaskProcessor):
         exercise = exercises[0]
 
         content = Task7Content.model_validate(exercise.content)
-
         if content.incorrect_answer is None:
             raise InvalidExerciseDataError(exercise.id, "no incorrect_answer in content")
 
         correct_phrase = content.phrase.format(word=exercise.answer.upper())
         incorrect_phrase = content.phrase.format(word=content.incorrect_answer.upper())
-
         options = [
             TaskOption(text=correct_phrase, value=exercise.answer),
             TaskOption(text=incorrect_phrase, value=content.incorrect_answer),
         ]
         random.shuffle(options)
 
-        task_text = "Выберите словосочетание, в котором нет грамматической ошибки."
-
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=options,
-            ),
+            task_ui=TaskUI(view=self._formatter.drill_condition(), options=options),
             exercise_ids=exercise.id,
         )
 
@@ -77,19 +81,16 @@ class Task7DrillProcessor(BaseTaskProcessor):
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task7Content.model_validate(exercise.content)
-        correct_phrase = content.phrase.format(word=f"{exercise.answer.upper()}")
-
-        if is_correct:
-            explanation = f"<b>Ответ:</b> {correct_phrase}\n\n{exercise.explanation}"
-        else:
-            user_answer_phrase = content.phrase.format(word=f"{user_answer.upper()}")
-            explanation = (f"<b>Ваш ответ:</b> {user_answer_phrase}\n"
-                           f"<b>Правильный ответ:</b> {correct_phrase}\n\n"
-                           f"{exercise.explanation}")
-
         return CheckResult(
             is_correct=is_correct,
-            explanation=explanation,
+            explanation=None,
+            result_view=self._formatter.drill_result(
+                correct_word=exercise.answer,
+                phrase_template=content.phrase,
+                explanation=exercise.explanation or "",
+                user_answer=user_answer,
+                is_correct=is_correct,
+            ),
         )
 
 
@@ -101,6 +102,18 @@ class Task7ExamProcessor(BaseTaskProcessor):
     Фильтрация (distinct group_id, наличие incorrect_answer) — на уровне БД.
     Записывает UserAnswer только для фразы с ошибкой.
     """
+
+    _formatter = Task7Formatter()
+
+    @staticmethod
+    def _shown_pairs(exercises: Sequence[Exercise | ExerciseDTO], wrong_index: int) -> list[tuple[str, str]]:
+        """Для каждого словосочетания — (шаблон, показанное слово): неверное для wrong_index, иначе верное."""
+        pairs: list[tuple[str, str]] = []
+        for i, exercise in enumerate(exercises):
+            content = Task7Content.model_validate(exercise.content)
+            word = (content.incorrect_answer or exercise.answer) if i == wrong_index else exercise.answer
+            pairs.append((content.phrase, word))
+        return pairs
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
@@ -128,31 +141,10 @@ class Task7ExamProcessor(BaseTaskProcessor):
         wrong_phrase_index = random.randint(0, EXAM_PHRASES_COUNT - 1)
         exercises.insert(wrong_phrase_index, wrong_exercise)
 
-        phrases = []
-        for i, exercise in enumerate(exercises):
-            content = Task7Content.model_validate(exercise.content)
-
-            if i == wrong_phrase_index:
-                word = content.incorrect_answer or exercise.answer
-                phrase = content.phrase.format(word=f"<b>{word.upper()}</b>")
-            else:
-                phrase = content.phrase.format(word=f"<b>{exercise.answer.upper()}</b>")
-
-            phrases.append(phrase)
-
-        task_text = (
-            "В одном из выделенных ниже слов допущена грамматическая ошибка. "
-            "Исправьте ошибку и запишите слово правильно.\n\n"
-        )
-        for i, phrase in enumerate(phrases, start=1):
-            task_text += f"{i}) {phrase}\n"
-
+        shown = self._shown_pairs(exercises, wrong_phrase_index)
         exercise_ids = [ex.id for ex in exercises]
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=None,
-            ),
+            task_ui=TaskUI(view=self._formatter.condition(shown), options=None),
             exercise_ids=exercise_ids,
             task_config=Task7ExamConfig(
                 exercise_ids=exercise_ids,
@@ -184,20 +176,15 @@ class Task7ExamProcessor(BaseTaskProcessor):
         self._record_answer(user, wrong_exercise.id, is_correct, user_answer, solve_time)
 
         wrong_content = Task7Content.model_validate(wrong_exercise.content)
-        correct_phrase = wrong_content.phrase.format(word=f"{wrong_exercise.answer.upper()}")
-
-        explanation = f"{correct_phrase}\n\n{wrong_exercise.explanation}"
-
-        if not is_correct:
-            explanation = (
-                f"<b>Ваш ответ:</b> {html.escape(user_answer, quote=False)}\n"
-                f"<b>Правильный ответ:</b> {wrong_exercise.answer}\n\n"
-                + explanation
-            )
-        else:
-            explanation = f"<b>Ответ:</b> {wrong_exercise.answer}\n\n" + explanation
-
         return CheckResult(
             is_correct=is_correct,
-            explanation=explanation,
+            explanation=None,
+            result_view=self._formatter.result(
+                correct_word=wrong_exercise.answer,
+                phrase_template=wrong_content.phrase,
+                explanation=wrong_exercise.explanation or "",
+                shown=self._shown_pairs(ordered_exercises, config.wrong_phrase_index),
+                user_answer=user_answer,
+                is_correct=is_correct,
+            ),
         )
