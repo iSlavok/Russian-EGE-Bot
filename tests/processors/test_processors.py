@@ -3,22 +3,15 @@ from datetime import UTC, datetime
 import pytest
 
 from app.enums import HandlerType
-from app.processors.impl import (
-    SkipProcessor,
-    SoonProcessor,
-    Task1DrillProcessor,
-    Task2DrillProcessor,
-    Task3ExamProcessor,
-    Task6ExamProcessor,
-    Task17ExamProcessor,
-    Task18ExamProcessor,
-    Task19ExamProcessor,
-    Task20ExamProcessor,
-    Task25ExamProcessor,
-    Task26ExamProcessor,
-    Task23ExamProcessor,
-    Task24ExamProcessor,
-)
+from app.processors.tasks.generic import SkipProcessor, SoonProcessor
+from app.processors.tasks.task_01 import Task1DrillProcessor
+from app.processors.tasks.task_02 import Task2DrillProcessor
+from app.processors.tasks.task_03 import Task3ExamProcessor
+from app.processors.tasks.task_06 import Task6ExamProcessor
+from app.processors.tasks.task_17_20 import Task17ExamProcessor, Task18ExamProcessor, Task19ExamProcessor, Task20ExamProcessor
+from app.processors.tasks.task_23_24 import Task23ExamProcessor, Task24ExamProcessor
+from app.processors.tasks.task_25 import Task25ExamProcessor
+from app.processors.tasks.task_26 import Task26ExamProcessor
 from app.schemas import CategoryDTO, CheckResult, ExerciseDTO, TaskResponse, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 

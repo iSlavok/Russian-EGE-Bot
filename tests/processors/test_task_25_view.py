@@ -1,5 +1,5 @@
 """Юнит-тесты форматтера задания 25 (чистый, без БД): только exam."""
-from app.processors.formatters import Task25Formatter
+from app.processors.tasks.task_25 import Task25Formatter
 from app.rendering.rich_renderer import RichRenderer
 
 _F = Task25Formatter()

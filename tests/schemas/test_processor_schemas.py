@@ -1,45 +1,24 @@
 import pytest
 from pydantic import ValidationError
 
-from app.processors.schemas import (
-    Task1Content,
-    Task2Content,
-    Task3Content,
-    Task4Content,
-    Task4ExamConfig,
-    Task5Content,
-    Task5ExamConfig,
-    Task5Paronym,
-    Task6Content,
-    Task6Type,
-    Task7Content,
-    Task7ExamConfig,
-    Task8Content,
-    Task8ExamConfig,
-    Task13Content,
-    Task13ExamConfig,
-    Task14DrillContent,
-    Task14ExamConfig,
-    Task14ExamContent,
-    Task15DrillContent,
-    Task15ExamConfig,
-    Task15ExamContent,
-    Task16Content,
-    Task16ExamConfig,
-    Task21ColonRule,
-    Task21CommaRule,
-    Task21DashRule,
-    Task21DrillContent,
-    Task21ExamContent,
-    Task21TaskType,
-    Task25Content,
-    Task26Content,
-    Task2324Config,
-    Task2324Content,
-    TaskN9N12Content,
-    TaskN9N12ExamConfig,
-    TaskN17N20Content,
-)
+from app.processors.tasks.task_01 import Task1Content
+from app.processors.tasks.task_02 import Task2Content
+from app.processors.tasks.task_03 import Task3Content
+from app.processors.tasks.task_04 import Task4Content, Task4ExamConfig
+from app.processors.tasks.task_05 import Task5Content, Task5ExamConfig, Task5Paronym
+from app.processors.tasks.task_06 import Task6Content, Task6Type
+from app.processors.tasks.task_07 import Task7Content, Task7ExamConfig
+from app.processors.tasks.task_08 import Task8Content, Task8ExamConfig
+from app.processors.tasks.task_09_12 import TaskN9N12Content, TaskN9N12ExamConfig
+from app.processors.tasks.task_13 import Task13Content, Task13ExamConfig
+from app.processors.tasks.task_14 import Task14DrillContent, Task14ExamConfig, Task14ExamContent
+from app.processors.tasks.task_15 import Task15DrillContent, Task15ExamConfig, Task15ExamContent
+from app.processors.tasks.task_16 import Task16Content, Task16ExamConfig
+from app.processors.tasks.task_17_20 import TaskN17N20Content
+from app.processors.tasks.task_21 import Task21ColonRule, Task21CommaRule, Task21DashRule, Task21DrillContent, Task21ExamContent, Task21TaskType
+from app.processors.tasks.task_23_24 import Task2324Config, Task2324Content
+from app.processors.tasks.task_25 import Task25Content
+from app.processors.tasks.task_26 import Task26Content
 
 
 class TestTask1Content:

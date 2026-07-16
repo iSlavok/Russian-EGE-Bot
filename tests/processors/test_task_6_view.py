@@ -1,6 +1,6 @@
 """Юнит-тесты форматтера задания 6 (чистый, без БД): exam."""
-from app.processors.formatters import Task6Formatter
-from app.processors.schemas import Task6Content, Task6Type
+from app.processors.tasks.task_06 import Task6Formatter
+from app.processors.tasks.task_06 import Task6Content, Task6Type
 from app.rendering.rich_renderer import RichRenderer
 
 _F = Task6Formatter()
