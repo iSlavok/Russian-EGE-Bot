@@ -47,6 +47,5 @@ class Task1DrillProcessor(BaseTaskProcessor):
         content = Task1Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(content, correct_answers, user_answer, is_correct=is_correct),
         )

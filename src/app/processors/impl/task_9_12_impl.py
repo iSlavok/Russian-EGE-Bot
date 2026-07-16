@@ -178,7 +178,6 @@ class _BaseN9N12DrillProcessor(BaseTaskProcessor):
 
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.drill_result(
                 word=_word_of(exercise), user_letter=user_answer, is_correct=is_correct,
             ),
@@ -263,7 +262,6 @@ class _BaseN9N12ExamProcessor(BaseTaskProcessor):
 
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_answer=correct_answer, user_answer=user_digits, rows=rows, is_correct=is_correct,
             ),

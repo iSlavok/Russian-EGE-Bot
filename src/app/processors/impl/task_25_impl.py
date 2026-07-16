@@ -39,7 +39,6 @@ class Task25ExamProcessor(BaseTaskProcessor):
         content = Task25Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 forms=correct_options,
                 user_answer=user_answer,

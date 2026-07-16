@@ -9,12 +9,9 @@ class TaskOption(BaseModel):
 
 
 class TaskUI(BaseModel):
-    text: str | None = None
-    text_continuation: str | None = None
+    view: TaskView
     options: list[TaskOption] | None = None
-    parse_mode: str = "HTML"
     options_per_row: int | list[int] = 1
-    view: TaskView | None = None
 
 
 class TaskResponse(BaseModel):
@@ -25,5 +22,4 @@ class TaskResponse(BaseModel):
 
 class CheckResult(BaseModel):
     is_correct: bool
-    explanation: str | None
-    result_view: ResultView | None = None
+    result_view: ResultView

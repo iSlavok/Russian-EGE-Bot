@@ -76,7 +76,7 @@ class TestGenericProcessors:
         dto = _user_dto(user, cat)
         result = await processor.create_task(dto)
         assert isinstance(result, TaskResponse)
-        assert result.task_ui.text or result.task_ui.view is not None
+        assert result.task_ui.view is not None
 
     async def test_process_answer(self, processor_cls, exercise_repository, user_answer_repository, exercise_selector,
                                   user_factory, category_factory):
@@ -194,7 +194,7 @@ class TestDirectCategoryCreateTask:
         processor = processor_factory.get_processor(handler_type)
         result = await processor.create_task(dto)
         assert isinstance(result, TaskResponse)
-        assert result.task_ui.text or result.task_ui.view is not None
+        assert result.task_ui.view is not None
 
 
 @pytest.mark.parametrize("handler_type,content,answer", DIRECT_CATEGORY_CASES)
@@ -212,7 +212,7 @@ class TestDirectCategoryProcessAnswer:
         result = await processor.process_answer(dto, answer)
         assert isinstance(result, CheckResult)
         assert result.is_correct is True
-        assert result.explanation is not None or result.result_view is not None
+        assert result.result_view is not None
 
     async def test_wrong_answer(
         self, handler_type, content, answer,
@@ -294,7 +294,7 @@ class TestParentCategoryCreateTask:
         processor = processor_factory.get_processor(handler_type)
         result = await processor.create_task(dto)
         assert isinstance(result, TaskResponse)
-        assert result.task_ui.text or result.task_ui.view is not None
+        assert result.task_ui.view is not None
 
 
 @pytest.mark.parametrize("handler_type,content,answer", PARENT_CATEGORY_CASES)

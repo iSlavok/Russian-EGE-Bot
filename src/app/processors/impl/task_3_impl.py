@@ -40,7 +40,6 @@ class Task3ExamProcessor(BaseTaskProcessor):
 
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 content, exercise.answer, exercise.explanation or "", user_answer, is_correct=is_correct,
             ),

@@ -51,7 +51,6 @@ class Task6ExamProcessor(BaseTaskProcessor):
         content = Task6Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 content, correct_answers, user_answer, exercise.explanation or "", is_correct=is_correct,
             ),

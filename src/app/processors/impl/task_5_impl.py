@@ -51,7 +51,7 @@ class Task5DrillProcessor(BaseTaskProcessor):
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        base_result = await self._process_answer_single_exercise(user, user_answer)
+        is_correct = await self._process_answer_single_exercise(user, user_answer)
 
         if not user.current_exercises:
             raise NoCurrentExercisesError
@@ -63,14 +63,13 @@ class Task5DrillProcessor(BaseTaskProcessor):
         correct_word = content.paronyms[int(exercise.answer) - 1].inflected_form
 
         return CheckResult(
-            is_correct=base_result.is_correct,
-            explanation=None,
+            is_correct=is_correct,
             result_view=self._formatter.drill_result(
                 correct_word=correct_word,
                 sentence_template=content.sentence,
                 paronym_explanations=[paronym.explanation for paronym in content.paronyms],
                 user_answer=user_answer,
-                is_correct=base_result.is_correct,
+                is_correct=is_correct,
             ),
         )
 
@@ -172,7 +171,6 @@ class Task5ExamProcessor(BaseTaskProcessor):
 
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_word=correct_word,
                 wrong_word=wrong_word,

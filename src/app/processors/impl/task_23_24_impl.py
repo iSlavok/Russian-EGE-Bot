@@ -67,7 +67,6 @@ class _Task2324BaseProcessor(BaseTaskProcessor):
         content = Task2324Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_answer=target_str,
                 user_answer=user_str,

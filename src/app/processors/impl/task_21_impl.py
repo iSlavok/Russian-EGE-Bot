@@ -43,7 +43,6 @@ class Task21DrillProcessor(BaseTaskProcessor):
         content = Task21DrillContent.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.drill_result(
                 task_type=content.task_type,
                 answer=exercise.answer,
@@ -96,7 +95,6 @@ class Task21ExamProcessor(BaseTaskProcessor):
         content = Task21ExamContent.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 task_type=content.task_type,
                 answer=exercise.answer,

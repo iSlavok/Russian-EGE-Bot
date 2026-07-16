@@ -83,7 +83,6 @@ class Task7DrillProcessor(BaseTaskProcessor):
         content = Task7Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.drill_result(
                 correct_word=exercise.answer,
                 phrase_template=content.phrase,
@@ -178,7 +177,6 @@ class Task7ExamProcessor(BaseTaskProcessor):
         wrong_content = Task7Content.model_validate(wrong_exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_word=wrong_exercise.answer,
                 phrase_template=wrong_content.phrase,

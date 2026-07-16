@@ -51,16 +51,15 @@ class Task4DrillProcessor(BaseTaskProcessor):
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        base_result = await self._process_answer_single_exercise(user, user_answer)
+        is_correct = await self._process_answer_single_exercise(user, user_answer)
 
         if not user.current_exercises:
             raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
         return CheckResult(
-            is_correct=base_result.is_correct,
-            explanation=None,
-            result_view=self._formatter.drill_result(exercise.explanation or "", is_correct=base_result.is_correct),
+            is_correct=is_correct,
+            result_view=self._formatter.drill_result(exercise.explanation or "", is_correct=is_correct),
         )
 
 
@@ -138,6 +137,5 @@ class Task4ExamProcessor(BaseTaskProcessor):
         correct_numbers = "".join(str(i) for i in sorted(correct_indices))
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(explanations, correct_numbers, user_answer, is_correct=is_correct),
         )

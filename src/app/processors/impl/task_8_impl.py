@@ -66,7 +66,6 @@ class Task8DrillProcessor(BaseTaskProcessor):
         content = Task8Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.drill_result(
                 correct_type=exercise.answer,
                 user_type=user_answer,
@@ -174,7 +173,6 @@ class Task8ExamProcessor(BaseTaskProcessor):
         sentences = [Task8Content.model_validate(ex.content).sentence for ex in ordered_exercises]
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_answer=correct_answer,
                 user_answer=user_digits,

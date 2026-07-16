@@ -60,7 +60,6 @@ class Task22DrillProcessor(BaseTaskProcessor):
         content = Task22DrillContent.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.drill_result(
                 devices=found_devices,
                 user_device=user_answer,
@@ -172,7 +171,6 @@ class Task22ExamProcessor(BaseTaskProcessor):
 
         return CheckResult(
             is_correct=all_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_answer="".join(correct_digits),
                 user_answer="".join(user_digits_display),

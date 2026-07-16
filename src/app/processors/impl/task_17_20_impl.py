@@ -34,7 +34,6 @@ class _BaseTaskN17N20Processor(BaseTaskProcessor):
         content = TaskN17N20Content.model_validate(exercise.content)
         return CheckResult(
             is_correct=is_correct,
-            explanation=None,
             result_view=self._formatter.result(
                 correct_answer=exercise.answer,
                 user_answer=user_digits,

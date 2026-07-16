@@ -30,7 +30,7 @@ class Task2DrillProcessor(BaseTaskProcessor):
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        base_result = await self._process_answer_single_exercise(user, user_answer)
+        is_correct = await self._process_answer_single_exercise(user, user_answer)
 
         if not user.current_exercises:
             raise NoCurrentExercisesError
@@ -38,9 +38,8 @@ class Task2DrillProcessor(BaseTaskProcessor):
 
         content = Task2Content.model_validate(exercise.content)
         return CheckResult(
-            is_correct=base_result.is_correct,
-            explanation=None,
+            is_correct=is_correct,
             result_view=self._formatter.result(
-                content, exercise.answer, exercise.explanation, is_correct=base_result.is_correct,
+                content, exercise.answer, exercise.explanation, is_correct=is_correct,
             ),
         )
