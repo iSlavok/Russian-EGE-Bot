@@ -5,32 +5,21 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NoCategoryError, NoHandlerTypeError
-from app.schemas import UserWithExercisesDTO
+from app.rendering.rich_renderer import RichRenderer
+from app.schemas import CheckResult, UserWithExercisesDTO
 from app.services.category_service import CategoryService
 from app.services.task_service import TaskService
 from app.services.user_service import UserService
-from app.utils.text_utils import split_html_text
 from bot.callback_datas import GetTaskCallbackData, SubmitAnswerCallbackData
 from bot.keyboards import get_back_keyboard, get_task_options_keyboard
 from bot.services import MessageManager
 
 router = Router(name="task_router")
+_renderer = RichRenderer()
 
 
-async def _send_result(message_manager: MessageManager, text: str, *, use_edit: bool) -> None:
-    """Отправляет текст результата, разбивая на 2 сообщения при превышении лимита TG."""
-    parts = split_html_text(text)
-    if len(parts) == 1:
-        if use_edit:
-            await message_manager.edit_message(text=text)
-        else:
-            await message_manager.send_message(text=text)
-    else:
-        if use_edit:
-            await message_manager.edit_message(text=parts[0])
-        else:
-            await message_manager.send_message(text=parts[0])
-        await message_manager.send_message(text=parts[1], clear_previous=False)
+async def _send_check_result(message_manager: MessageManager, result: CheckResult) -> None:
+    await message_manager.send_rich(_renderer.render_result(result.result_view), clear_previous=True)
 
 
 @router.callback_query(GetTaskCallbackData.filter())
@@ -70,19 +59,7 @@ async def send_new_task(user: UserWithExercisesDTO, task_service: TaskService, m
         back_category_id=back_category_id,
         row_width=task.options_per_row,
     ) if task.options else get_back_keyboard(back_category_id=back_category_id)
-    if task.text_continuation:
-        await message_manager.send_message(text=task.text, clear_previous=False)
-        await message_manager.send_message(
-            text=task.text_continuation,
-            reply_markup=keyboard,
-            clear_previous=False,
-        )
-        return 2
-    await message_manager.send_message(
-        text=task.text,
-        reply_markup=keyboard,
-        clear_previous=False,
-    )
+    await message_manager.send_rich(_renderer.render_task(task.view), reply_markup=keyboard, clear_previous=False)
     return 1
 
 
@@ -98,10 +75,7 @@ async def submit_answer_button(
     await message_manager.clear_messages(keep_bot_last=1)
     logger.debug("User {} submitted button answer: '{}'", user.id, callback_data.answer)
     result = await task_service.check_answer(user, callback_data.answer)
-    response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
-    if result.explanation:
-        response_text += f"\n\n{result.explanation}"
-    await _send_result(message_manager, response_text, use_edit=True)
+    await _send_check_result(message_manager, result)
     await send_new_task(user, task_service, message_manager)
     await session.commit()
     await callback_query.answer()
@@ -124,9 +98,6 @@ async def submit_answer(
     await message_manager.clear_messages(keep_bot_last=1)
     logger.debug("User {} submitted text answer: '{}'", user.id, message.text)
     result = await task_service.check_answer(user, message.text)
-    response_text = "✅ Правильно!" if result.is_correct else "❌ Неправильно."
-    if result.explanation:
-        response_text += f"\n\n{result.explanation}"
-    await _send_result(message_manager, response_text, use_edit=False)
+    await _send_check_result(message_manager, result)
     await send_new_task(user, task_service, message_manager)
     await session.commit()

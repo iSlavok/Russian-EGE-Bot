@@ -105,7 +105,8 @@ class BaseTaskProcessor(ABC, TaskProcessor):
         exercises_map = {ex.id: ex for ex in (user.current_exercises or [])}
         return [exercises_map[eid] for eid in exercise_ids]
 
-    async def _process_answer_single_exercise(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
+    async def _process_answer_single_exercise(self, user: UserWithExercisesDTO, user_answer: str) -> bool:
+        """Проверяет ответ на первое текущее упражнение, записывает его и возвращает корректность."""
         if not user.current_exercises:
             raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
@@ -125,7 +126,4 @@ class BaseTaskProcessor(ABC, TaskProcessor):
         )
         self._answer_repository.add(answer)
 
-        return CheckResult(
-            is_correct=is_correct,
-            explanation=exercise.explanation,
-        )
+        return is_correct

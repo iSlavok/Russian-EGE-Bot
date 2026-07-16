@@ -1,19 +1,10 @@
-import html
-
 from app.exceptions import NoCurrentExercisesError
 from app.processors import BaseTaskProcessor
-from app.processors.schemas import Task6Content, Task6Type
+from app.processors.formatters import Task6Formatter
+from app.processors.schemas import Task6Content
 from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.utils import check_answer
-
-INSTRUCTIONS = {
-    Task6Type.REMOVE: "Отредактируйте предложение: исправьте лексическую ошибку, <b>исключив лишнее слово.</b> "
-                      "Выпишите это слово.",
-    Task6Type.REPLACE: "Отредактируйте предложение: исправьте лексическую ошибку, "
-                       "<b>заменив употреблённое неверно слово.</b> Запишите подобранное слово, соблюдая нормы "
-                       "современного русского литературного языка и сохраняя смысл высказывания.",
-}
 
 
 class Task6ExamProcessor(BaseTaskProcessor):
@@ -33,20 +24,16 @@ class Task6ExamProcessor(BaseTaskProcessor):
     - Юзер НЕ может добавлять пробелы/тире там, где их нет в правильном ответе
     - Регистр игнорируется
     """
+
+    _formatter = Task6Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         category = self._require_category(user)
         exercise = await self._fetch_exercise(category.id, user.id)
 
         content = Task6Content.model_validate(exercise.content)
-
-        instruction = INSTRUCTIONS[content.task_type]
-
-        task_text = f"{instruction}\n\n<i>{content.sentence}</i>"
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=None,
-            ),
+            task_ui=TaskUI(view=self._formatter.condition(content), options=None),
             exercise_ids=exercise.id,
         )
 
@@ -56,31 +43,15 @@ class Task6ExamProcessor(BaseTaskProcessor):
         exercise = user.current_exercises[0]
 
         correct_answers = [ans.strip() for ans in exercise.answer.split(";")]
-
-        is_correct = any(
-            check_answer(user_answer, correct_ans)
-            for correct_ans in correct_answers
-        )
+        is_correct = any(check_answer(user_answer, correct_ans) for correct_ans in correct_answers)
 
         solve_time = self._compute_solve_time(user)
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task6Content.model_validate(exercise.content)
-
-        explanation = (f"{exercise.explanation}\n\n"
-                       f"<b>Исходное предложение:</b>\n<i>{content.sentence_with_markup}</i>\n\n"
-                       f"<b>Правильное предложение:</b>\n<i>{content.corrected_sentence}</i>")
-
-        if len(correct_answers) == 1 and correct_answers[0].lower() == user_answer.strip().lower():
-            explanation = f"<b>Ответ:</b> {correct_answers[0]}\n\n" + explanation
-        else:
-            if len(correct_answers) == 1:
-                explanation = f"<b>Правильный ответ:</b> {correct_answers[0]}\n\n" + explanation
-            else:
-                explanation = f"<b>Правильные ответы:</b> {' / '.join(correct_answers)}\n\n" + explanation
-            explanation = f"<b>Ваш ответ:</b> {html.escape(user_answer, quote=False)}\n" + explanation
-
         return CheckResult(
             is_correct=is_correct,
-            explanation=explanation,
+            result_view=self._formatter.result(
+                content, correct_answers, user_answer, exercise.explanation or "", is_correct=is_correct,
+            ),
         )

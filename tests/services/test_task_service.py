@@ -60,8 +60,7 @@ class TestStartTask:
         )
 
         task_ui = await task_service.start_task(user_dto)
-        assert task_ui.text is not None
-        assert len(task_ui.text) > 0
+        assert task_ui.view is not None
 
 
 class TestCheckAnswer:

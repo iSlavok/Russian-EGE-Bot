@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.enums import HandlerType
+from app.rendering.rich_renderer import RichRenderer
 from app.schemas import CategoryDTO, ExerciseDTO, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 
@@ -207,7 +208,8 @@ class TestTask5DrillProcessor:
         processor = processor_factory.get_processor(HandlerType.TASK_5_DRILL)
         result = await processor.process_answer(dto, "1")
         assert result.is_correct is True
-        assert "дипломатичным" in result.explanation.lower()
+        assert result.result_view is not None
+        assert "дипломатичным" in RichRenderer().render_result(result.result_view).lower()
 
 
 # ===================================================================
@@ -283,8 +285,10 @@ class TestTask4WithContext:
 
         processor = processor_factory.get_processor(HandlerType.TASK_4_DRILL)
         result = await processor.create_task(dto)
-        assert "красивые" in result.task_ui.text
-        assert "на столе" in result.task_ui.text
+        assert result.task_ui.view is not None
+        out = RichRenderer().render_task(result.task_ui.view)
+        assert "красивые" in out
+        assert "на столе" in out
 
 
 # ===================================================================
@@ -823,7 +827,7 @@ class TestTask7ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_7_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
         assert len(result.exercise_ids) == 5
 
@@ -859,7 +863,7 @@ class TestTask8ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_8_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
         assert len(result.exercise_ids) == 9
 
@@ -882,7 +886,7 @@ class TestTask15ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_15_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
 
 
@@ -913,7 +917,7 @@ class TestTask16ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_16_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
         assert len(result.exercise_ids) == 5
 
@@ -952,7 +956,7 @@ class TestTask14ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_14_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
         assert len(result.exercise_ids) == 5
 
@@ -998,7 +1002,7 @@ class TestTask13ExamCreateTask:
 
         processor = processor_factory.get_processor(HandlerType.TASK_13_EXAM)
         result = await processor.create_task(dto)
-        assert result.task_ui.text is not None
+        assert result.task_ui.view is not None
         assert result.task_config is not None
         assert len(result.exercise_ids) == 5
 

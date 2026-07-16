@@ -1,5 +1,5 @@
 from app.processors import BaseTaskProcessor
-from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
+from app.schemas import CheckResult, ResultView, TaskResponse, TaskUI, TaskView, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 
 
@@ -8,18 +8,12 @@ class SkipProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         return TaskResponse(
-            task_ui=TaskUI(
-                text="Это скипаем",
-                options=None,
-            ),
+            task_ui=TaskUI(view=TaskView(heading="Пропуск", instruction="Это задание пропускается.")),
             exercise_ids=[],
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        return CheckResult(
-            is_correct=True,
-            explanation="Скип",
-        )
+        return CheckResult(is_correct=True, result_view=ResultView(correct=True))
 
 
 class SoonProcessor(BaseTaskProcessor):
@@ -27,15 +21,9 @@ class SoonProcessor(BaseTaskProcessor):
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         return TaskResponse(
-            task_ui=TaskUI(
-                text="Скоро появится",
-                options=None,
-            ),
+            task_ui=TaskUI(view=TaskView(heading="В разработке", instruction="Это задание скоро появится.")),
             exercise_ids=[],
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        return CheckResult(
-            is_correct=True,
-            explanation="В разработке",
-        )
+        return CheckResult(is_correct=True, result_view=ResultView(correct=True))

@@ -1,4 +1,3 @@
-import html
 import random
 from collections.abc import Sequence
 
@@ -6,12 +5,22 @@ from app.exceptions import (
     InvalidExerciseCountError,
     InvalidExerciseDataError,
     MissingTaskConfigError,
+    NoCurrentExercisesError,
     TaskForUserNotFoundError,
 )
 from app.models import Exercise
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task5Formatter
 from app.processors.schemas import Task5Content, Task5ExamConfig
-from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithCategoryDTO, UserWithExercisesDTO
+from app.schemas import (
+    CheckResult,
+    ExerciseDTO,
+    TaskOption,
+    TaskResponse,
+    TaskUI,
+    UserWithCategoryDTO,
+    UserWithExercisesDTO,
+)
 from app.utils import check_answer
 
 EXAM_SENTENCES_COUNT = 5
@@ -24,65 +33,45 @@ class Task5DrillProcessor(BaseTaskProcessor):
     Пользователь должен выбрать подходящий по смыслу пароним для предложения.
     """
 
+    _formatter = Task5Formatter()
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
         exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task5Content.model_validate(exercise.content)
-
-        word_placeholder = html.escape("< . . . >", quote=False)
-        sentence = content.sentence.format(word=word_placeholder)
-
         options = [
             TaskOption(text=paronym.inflected_form, value=str(i + 1))
             for i, paronym in enumerate(content.paronyms)
         ]
 
-        task_text = (
-            "В предложении пропущено слово. Выберите из предложенных паронимов подходящее по смыслу.\n\n"
-            f"{sentence}"
-        )
-
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=options,
-            ),
+            task_ui=TaskUI(view=self._formatter.drill_condition(content.sentence), options=options),
             exercise_ids=exercise.id,
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
-        base_result = await self._process_answer_single_exercise(user, user_answer)
+        is_correct = await self._process_answer_single_exercise(user, user_answer)
 
-        if user.current_exercises:
-            exercise = user.current_exercises[0]
-            content = Task5Content.model_validate(exercise.content)
+        if not user.current_exercises:
+            raise NoCurrentExercisesError
+        exercise = user.current_exercises[0]
+        content = Task5Content.model_validate(exercise.content)
 
-            if not exercise.answer.isdigit():
-                raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
-            correct_answer_index = int(exercise.answer) - 1
-            correct_word = content.paronyms[correct_answer_index].inflected_form
+        if not exercise.answer.isdigit():
+            raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
+        correct_word = content.paronyms[int(exercise.answer) - 1].inflected_form
 
-            word_text = correct_word.lower()
-            if content.sentence.lstrip().startswith("{word}"):
-                word_text = word_text.capitalize()
-            sentence_with_correct_word = content.sentence.format(
-                word=f"<u>{word_text}</u>",
-            )
-
-            paronym_explanations = "\n\n".join(
-                paronym.explanation for paronym in content.paronyms
-            )
-
-            explanation = (f"<i>{sentence_with_correct_word}</i>\n\n"
-                           f"<b>Объяснение:</b>\n<blockquote expandable>{paronym_explanations}</blockquote>")
-
-            return CheckResult(
-                is_correct=base_result.is_correct,
-                explanation=explanation,
-            )
-
-        return base_result
+        return CheckResult(
+            is_correct=is_correct,
+            result_view=self._formatter.drill_result(
+                correct_word=correct_word,
+                sentence_template=content.sentence,
+                paronym_explanations=[paronym.explanation for paronym in content.paronyms],
+                user_answer=user_answer,
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task5ExamProcessor(BaseTaskProcessor):
@@ -91,20 +80,15 @@ class Task5ExamProcessor(BaseTaskProcessor):
     Создает задание из 5 предложений: 4 с правильными словами, 1 с неправильным.
     Пользователь должен ввести правильное слово для предложения с ошибкой.
     """
+
+    _formatter = Task5Formatter()
+
     @staticmethod
     def _select_exercises_without_word_overlap(
         exercises: Sequence[Exercise],
         limit: int,
     ) -> list[Exercise]:
-        """Выбирает упражнения без пересечения слов в поле content['words'].
-
-        Args:
-            exercises: список упражнений для фильтрации
-            limit: необходимое количество упражнений
-
-        Returns:
-            Список упражнений без пересечения слов
-        """
+        """Выбирает упражнения без пересечения слов в поле content['words']."""
         selected: list[Exercise] = []
         used_words: set[str] = set()
 
@@ -121,47 +105,35 @@ class Task5ExamProcessor(BaseTaskProcessor):
 
         return selected
 
+    @staticmethod
+    def _shown_pairs(exercises: Sequence[Exercise | ExerciseDTO], wrong_index: int) -> list[tuple[str, str]]:
+        """Для каждого предложения — (шаблон, показанное слово): неверное для wrong_index, иначе верное."""
+        pairs: list[tuple[str, str]] = []
+        for i, exercise in enumerate(exercises):
+            content = Task5Content.model_validate(exercise.content)
+            if i == wrong_index:
+                word = content.paronyms[content.secondary_number - 1].inflected_form
+            else:
+                if not exercise.answer.isdigit():
+                    raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
+                word = content.paronyms[int(exercise.answer) - 1].inflected_form
+            pairs.append((content.sentence, word))
+        return pairs
+
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
         exercises_pool = await self._fetch_exercises(parent_id, user.id, EXAM_INITIAL_POOL_SIZE)
 
         exercises = self._select_exercises_without_word_overlap(exercises_pool, EXAM_SENTENCES_COUNT)
-
         if len(exercises) < EXAM_SENTENCES_COUNT:
             raise TaskForUserNotFoundError(user.id)
 
         wrong_sentence_index = random.randint(0, EXAM_SENTENCES_COUNT - 1)
-
-        sentences = []
-        for i, exercise in enumerate(exercises):
-            content = Task5Content.model_validate(exercise.content)
-
-            if i == wrong_sentence_index:
-                wrong_word = content.paronyms[content.secondary_number - 1].inflected_form
-                sentence = content.sentence.format(word=f"<b>{wrong_word.upper()}</b>")
-            else:
-                if not exercise.answer.isdigit():
-                    raise InvalidExerciseDataError(exercise.id, "answer must be a digit")
-                correct_answer_index = int(exercise.answer) - 1
-                correct_word = content.paronyms[correct_answer_index].inflected_form
-                sentence = content.sentence.format(word=f"<b>{correct_word.upper()}</b>")
-
-            sentences.append(sentence)
-
-        task_text = (
-            "В одном из приведённых ниже предложений <b>НЕВЕРНО</b> употреблено выделенное слово. "
-            "Исправьте лексическую ошибку, <b>подобрав к выделенному слову пароним</b>. Запишите подобранное слово, "
-            "соблюдая нормы современного русского литературного языка.\n\n\n"
-        )
-        for i, sentence in enumerate(sentences, start=1):
-            task_text += f"{i}) {sentence}\n"
+        shown = self._shown_pairs(exercises, wrong_sentence_index)
 
         exercise_ids = [ex.id for ex in exercises]
         return TaskResponse(
-            task_ui=TaskUI(
-                text=task_text,
-                options=None,
-            ),
+            task_ui=TaskUI(view=self._formatter.condition(shown), options=None),
             exercise_ids=exercise_ids,
             task_config=Task5ExamConfig(
                 exercise_ids=exercise_ids,
@@ -180,14 +152,12 @@ class Task5ExamProcessor(BaseTaskProcessor):
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
 
         wrong_exercise = ordered_exercises[config.wrong_sentence_index]
-        wrong_exercise_content = Task5Content.model_validate(wrong_exercise.content)
+        wrong_content = Task5Content.model_validate(wrong_exercise.content)
 
         if not wrong_exercise.answer.isdigit():
             raise InvalidExerciseDataError(wrong_exercise.id, "answer must be a digit")
-        correct_answer_index = int(wrong_exercise.answer) - 1
-
-        correct_word = wrong_exercise_content.paronyms[correct_answer_index].inflected_form
-        wrong_word = wrong_exercise_content.paronyms[wrong_exercise_content.secondary_number - 1].inflected_form
+        correct_word = wrong_content.paronyms[int(wrong_exercise.answer) - 1].inflected_form
+        wrong_word = wrong_content.paronyms[wrong_content.secondary_number - 1].inflected_form
 
         is_correct = check_answer(
             user_answer,
@@ -197,31 +167,17 @@ class Task5ExamProcessor(BaseTaskProcessor):
         )
 
         solve_time = self._compute_solve_time(user)
-
         self._record_answer(user, wrong_exercise.id, is_correct, user_answer, solve_time)
-
-        if not is_correct:
-            explanation = f"<b>Ваш ответ: {html.escape(user_answer, quote=False)}</b>\n"
-            explanation += f"<b>Правильный ответ: {correct_word}</b>\n"
-            explanation += f"<b>Неправильное слово в задании: {wrong_word}</b>\n\n"
-        else:
-            explanation = f"<b>Ответ: {correct_word}</b>\n"
-            explanation += f"<b>Неправильное слово в задании: {wrong_word}</b>\n\n"
-
-        word_text = correct_word.lower()
-        if wrong_exercise_content.sentence.lstrip().startswith("{word}"):
-            word_text = word_text.capitalize()
-        sentence_with_correct_word = wrong_exercise_content.sentence.format(
-            word=f"<u>{word_text}</u>",
-        )
-        explanation += f"<i>{sentence_with_correct_word}</i>\n\n"
-
-        paronym_explanations = "\n\n".join(
-            paronym.explanation for paronym in wrong_exercise_content.paronyms
-        )
-        explanation += f"<b>Объяснения:</b>\n<blockquote expandable>{paronym_explanations}</blockquote>"
 
         return CheckResult(
             is_correct=is_correct,
-            explanation=explanation,
+            result_view=self._formatter.result(
+                correct_word=correct_word,
+                wrong_word=wrong_word,
+                sentence_template=wrong_content.sentence,
+                paronym_explanations=[paronym.explanation for paronym in wrong_content.paronyms],
+                shown=self._shown_pairs(ordered_exercises, config.wrong_sentence_index),
+                user_answer=user_answer,
+                is_correct=is_correct,
+            ),
         )

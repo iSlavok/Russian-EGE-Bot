@@ -9,6 +9,7 @@ from app.exceptions import (
 )
 from app.models import Exercise
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task13Formatter, Task13Sentence
 from app.processors.schemas import Task13Content, Task13ExamConfig
 from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
@@ -21,35 +22,28 @@ NI_COUNT_WEIGHTS = [4, 4, 1]
 _TOGETHER = "TOGETHER"
 _SEPARATE = "SEPARATE"
 
-_ANSWER_DISPLAY = {
-    _TOGETHER: "слитно",
-    _SEPARATE: "раздельно",
-}
-
 _MODE_NE = "НЕ"
 _MODE_NE_NI = "НЕ/НИ"
 
 
 class Task13DrillProcessor(BaseTaskProcessor):
+    _formatter = Task13Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
         exercise = await self._fetch_exercise(parent_id, user.id)
 
         content = Task13Content.model_validate(exercise.content)
-
-        task_text = (
-            f"Укажите, как пишется частица <b>{content.particle}</b> в данном предложении.\n\n"
-            f"<i>{content.sentence}</i>"
-        )
-
         options = [
             TaskOption(text="Слитно", value=_TOGETHER),
             TaskOption(text="Раздельно", value=_SEPARATE),
         ]
 
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=options),
+            task_ui=TaskUI(
+                view=self._formatter.drill_condition(particle=content.particle, sentence=content.sentence),
+                options=options,
+            ),
             exercise_ids=exercise.id,
         )
 
@@ -63,21 +57,21 @@ class Task13DrillProcessor(BaseTaskProcessor):
         solve_time = self._compute_solve_time(user)
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
-        correct_display = _ANSWER_DISPLAY[exercise.answer]
-        if is_correct:
-            explanation = f"<b>Ответ:</b> {correct_display}\n\n{exercise.explanation}"
-        else:
-            user_display = _ANSWER_DISPLAY.get(user_answer, user_answer)
-            explanation = (
-                f"<b>Ваш ответ:</b> {user_display}\n"
-                f"<b>Правильный ответ:</b> {correct_display}\n\n"
-                f"{exercise.explanation}"
-            )
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        content = Task13Content.model_validate(exercise.content)
+        return CheckResult(
+            is_correct=is_correct,
+            result_view=self._formatter.drill_result(
+                sentence=content.sentence,
+                answer=exercise.answer,
+                user_answer=user_answer,
+                explanation=exercise.explanation or "",
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task13ExamProcessor(BaseTaskProcessor):
+    _formatter = Task13Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
@@ -103,29 +97,20 @@ class Task13ExamProcessor(BaseTaskProcessor):
         random.shuffle(all_exs)
         correct_indices = [i for i, ex in enumerate(all_exs) if ex.answer == answer_type]
 
-        answer_display = _ANSWER_DISPLAY[answer_type]
-        particle_label = f"<b>{mode}</b>"
-
-        task_text = (
-            f"Укажите варианты ответов, в которых {particle_label} пишется "
-            f"<b>{answer_display}</b>. Запишите номера ответов.\n\n"
-        )
-        for i, ex in enumerate(all_exs, start=1):
-            content = Task13Content.model_validate(ex.content)
-            task_text += f"{i}) {content.sentence}\n"
-
+        sentences = [Task13Content.model_validate(ex.content).sentence for ex in all_exs]
         exercise_ids = [ex.id for ex in all_exs]
-        config = Task13ExamConfig(
-            exercise_ids=exercise_ids,
-            correct_indices=correct_indices,
-            answer_type=answer_type,
-            mode=mode,
-        )
-
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=None),
+            task_ui=TaskUI(
+                view=self._formatter.condition(mode=mode, answer_type=answer_type, sentences=sentences),
+                options=None,
+            ),
             exercise_ids=exercise_ids,
-            task_config=config,
+            task_config=Task13ExamConfig(
+                exercise_ids=exercise_ids,
+                correct_indices=correct_indices,
+                answer_type=answer_type,
+                mode=mode,
+            ),
         )
 
     async def _fetch_ne_exercises(
@@ -222,32 +207,29 @@ class Task13ExamProcessor(BaseTaskProcessor):
 
         solve_time = self._compute_solve_time(user)
         ordered_exercises = self._get_ordered_exercises(user, config.exercise_ids)
-
         group_id = uuid.uuid4()
-        details = ""
 
+        sentences: list[Task13Sentence] = []
         for i, ex in enumerate(ordered_exercises):
-            sentence_num = i + 1
             is_correct_sentence = i in config.correct_indices
-            user_selected = str(sentence_num) in user_digits
+            user_selected = str(i + 1) in user_digits
             sentence_right = user_selected == is_correct_sentence
 
             content = Task13Content.model_validate(ex.content)
-            answer_display = _ANSWER_DISPLAY[ex.answer]
-
-            details += f"<b>{sentence_num})</b> {content.sentence}\n"
-            details += f"<i>Пишется {answer_display}. {ex.explanation}</i>\n\n"
-
+            sentences.append(Task13Sentence(
+                sentence=content.sentence,
+                answer=ex.answer,
+                explanation=ex.explanation or "",
+                wrong=not sentence_right,
+            ))
             self._record_answer(user, ex.id, sentence_right, user_answer, solve_time, group_id)
 
-        if is_correct:
-            explanation = f"<b>Ответ: {correct_answer}</b>"
-        else:
-            explanation = (
-                f"Ваш ответ: {user_digits}\n"
-                f"<b>Правильный ответ: {correct_answer}</b>"
-            )
-
-        explanation += f"\n\n<b>Объяснения:</b>\n<blockquote expandable>{details}</blockquote>"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            result_view=self._formatter.result(
+                correct_answer=correct_answer,
+                user_answer=user_digits,
+                sentences=sentences,
+                is_correct=is_correct,
+            ),
+        )

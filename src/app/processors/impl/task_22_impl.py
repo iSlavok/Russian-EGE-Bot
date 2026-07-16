@@ -3,27 +3,18 @@ import uuid
 
 from app.exceptions import NoCurrentExercisesError, TaskForUserNotFoundError
 from app.processors import BaseTaskProcessor
+from app.processors.formatters import Task22Formatter, Task22Letter
 from app.processors.schemas.task_22_schemas import (
     ALL_DEVICES,
-    DEVICE_NAMES,
     Task22DrillConfig,
     Task22DrillContent,
     Task22ExamConfig,
 )
-from app.schemas import CheckResult, TaskOption, TaskResponse, TaskUI, UserWithExercisesDTO
+from app.schemas import CheckResult, TaskResponse, TaskUI, UserWithExercisesDTO
 from app.schemas.user_schemas import UserWithCategoryDTO
 
-_LABELS = ["А", "Б", "В", "Г", "Д"]
 _EXAM_SENTENCES = 5
 _EXAM_DISTRACTORS = 4
-
-_DRILL_FORMULATION = "Определите средство выразительности."
-
-_EXAM_FORMULATION = (
-    "Прочитайте фрагменты текстов и определите, какое средство выразительности "
-    "использовано в каждом предложении. Запишите цифры в порядке, "
-    "соответствующем буквам."
-)
 
 
 class Task22DrillProcessor(BaseTaskProcessor):
@@ -32,6 +23,8 @@ class Task22DrillProcessor(BaseTaskProcessor):
     Показывает одно предложение. Кнопки — 5 средств (1 правильное + 4 дистрактора).
     Ответ — enum-значение выбранного средства.
     """
+
+    _formatter = Task22Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
@@ -43,15 +36,12 @@ class Task22DrillProcessor(BaseTaskProcessor):
 
         options_values = [target, *content.distractor_devices]
         random.shuffle(options_values)
-        options = [
-            TaskOption(text=DEVICE_NAMES[v], value=v)
-            for v in options_values
-        ]
-
-        task_text = f"{_DRILL_FORMULATION}\n\n{content.sentence}"
 
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=options),
+            task_ui=TaskUI(
+                view=self._formatter.drill_condition(content.sentence),
+                options=self._formatter.drill_options(options_values),
+            ),
             exercise_ids=exercise.id,
             task_config=Task22DrillConfig(target=target),
         )
@@ -61,34 +51,22 @@ class Task22DrillProcessor(BaseTaskProcessor):
             raise NoCurrentExercisesError
         exercise = user.current_exercises[0]
 
-        found_devices = set(exercise.answer.split(";"))
-        is_correct = user_answer in found_devices
+        found_devices = exercise.answer.split(";")
+        is_correct = user_answer in set(found_devices)
 
         solve_time = self._compute_solve_time(user)
         self._record_answer(user, exercise.id, is_correct, user_answer, solve_time)
 
         content = Task22DrillContent.model_validate(exercise.content)
-        drill_config = Task22DrillConfig.model_validate(user.current_task_config)
-
-        correct_parts = []
-        for d in found_devices:
-            name = DEVICE_NAMES[d]
-            if d == drill_config.target:
-                name = f"<u>{name}</u>"
-            correct_parts.append(name)
-        correct_names = " / ".join(correct_parts)
-
-        if is_correct:
-            explanation = f"<b>Ответ:</b> {correct_names}"
-        else:
-            explanation = (
-                f"<b>Ваш ответ:</b> {DEVICE_NAMES.get(user_answer, user_answer)}\n"
-                f"<b>Правильный ответ:</b> {correct_names}"
-            )
-
-        explanation += f"\n\n{content.sentence}"
-
-        return CheckResult(is_correct=is_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=is_correct,
+            result_view=self._formatter.drill_result(
+                devices=found_devices,
+                user_device=user_answer,
+                sentence=content.sentence,
+                is_correct=is_correct,
+            ),
+        )
 
 
 class Task22ExamProcessor(BaseTaskProcessor):
@@ -98,6 +76,8 @@ class Task22ExamProcessor(BaseTaskProcessor):
     Пользователь вводит 5 цифр в порядке А–Д.
     Ответ проверяется индивидуально для каждого предложения.
     """
+
+    _formatter = Task22Formatter()
 
     async def create_task(self, user: UserWithCategoryDTO) -> TaskResponse:
         parent_id = self._require_parent_category_id(user)
@@ -132,25 +112,15 @@ class Task22ExamProcessor(BaseTaskProcessor):
         device_options = correct_devices + distractors
         random.shuffle(device_options)
 
-        sentences_text = "\n\n".join(
-            f"<b>{label}.</b> {Task22DrillContent.model_validate(ex.content).sentence}"
-            for label, ex in zip(_LABELS, exercises, strict=False)
-        )
-        options_text = "\n".join(
-            f"{i + 1}. {DEVICE_NAMES[d]}"
-            for i, d in enumerate(device_options)
-        )
-        task_text = f"{_EXAM_FORMULATION}\n\n{sentences_text}\n\n{options_text}"
-
-        task_config = Task22ExamConfig(
-            exercise_ids=[ex.id for ex in exercises],
-            device_options=device_options,
-        )
-
+        sentences = [Task22DrillContent.model_validate(ex.content).sentence for ex in exercises]
+        exercise_ids = [ex.id for ex in exercises]
         return TaskResponse(
-            task_ui=TaskUI(text=task_text, options=None),
-            exercise_ids=[ex.id for ex in exercises],
-            task_config=task_config,
+            task_ui=TaskUI(
+                view=self._formatter.condition(sentences=sentences, device_options=device_options),
+                options=None,
+            ),
+            exercise_ids=exercise_ids,
+            task_config=Task22ExamConfig(exercise_ids=exercise_ids, device_options=device_options),
         )
 
     async def process_answer(self, user: UserWithExercisesDTO, user_answer: str) -> CheckResult:
@@ -159,30 +129,28 @@ class Task22ExamProcessor(BaseTaskProcessor):
 
         task_config = Task22ExamConfig.model_validate(user.current_task_config)
         exercises = self._get_ordered_exercises(user, task_config.exercise_ids)
+        device_options = task_config.device_options
 
         digits = [c for c in user_answer if c.isdigit()]
-
         solve_time = self._compute_solve_time(user)
         shared_group_id = uuid.uuid4()
         all_correct = True
 
         correct_digits: list[str] = []
         user_digits_display: list[str] = []
-        detail_lines: list[str] = []
+        letters: list[Task22Letter] = []
 
         for i, exercise in enumerate(exercises):
             found_devices = set(exercise.answer.split(";"))
-            correct_device = next(
-                (d for d in task_config.device_options if d in found_devices), None,
-            )
-            correct_digit = str(task_config.device_options.index(correct_device) + 1) if correct_device else "?"
+            correct_device = next((d for d in device_options if d in found_devices), None)
+            correct_digit = str(device_options.index(correct_device) + 1) if correct_device else "?"
             correct_digits.append(correct_digit)
 
             digit = digits[i] if i < len(digits) else ""
             user_digits_display.append(digit or "-")
 
-            if digit and 1 <= int(digit) <= len(task_config.device_options):
-                selected_device = task_config.device_options[int(digit) - 1]
+            if digit and 1 <= int(digit) <= len(device_options):
+                selected_device = device_options[int(digit) - 1]
                 is_ex_correct = selected_device in found_devices
             else:
                 selected_device = None
@@ -190,26 +158,24 @@ class Task22ExamProcessor(BaseTaskProcessor):
 
             if not is_ex_correct:
                 all_correct = False
-
             if selected_device:
                 self._record_answer(user, exercise.id, is_ex_correct, selected_device, solve_time, shared_group_id)
 
             content = Task22DrillContent.model_validate(exercise.content)
-            correct_name = DEVICE_NAMES.get(correct_device, correct_device) if correct_device else "?"
-            detail_lines.append(f"<b>{_LABELS[i]}.</b> {content.sentence}\n→ {correct_name}")
+            letters.append(Task22Letter(
+                number=correct_digit,
+                device=correct_device or "",
+                sentence=content.sentence,
+                wrong=digit != correct_digit,
+            ))
 
-        correct_answer_str = "".join(correct_digits)
-        user_answer_str = "".join(user_digits_display)
-
-        if all_correct:
-            header = f"<b>Ответ:</b> {user_answer_str}"
-        else:
-            header = (
-                f"<b>Ваш ответ:</b> {user_answer_str}\n"
-                f"<b>Правильный ответ:</b> {correct_answer_str}"
-            )
-
-        details = "\n\n".join(detail_lines)
-        explanation = f"{header}\n\n<blockquote expandable>{details}</blockquote>"
-
-        return CheckResult(is_correct=all_correct, explanation=explanation)
+        return CheckResult(
+            is_correct=all_correct,
+            result_view=self._formatter.result(
+                correct_answer="".join(correct_digits),
+                user_answer="".join(user_digits_display),
+                letters=letters,
+                device_options=device_options,
+                is_correct=all_correct,
+            ),
+        )
