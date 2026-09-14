@@ -3,6 +3,7 @@ name: Publish Docker image to GHCR on Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -16,6 +17,8 @@ jobs:
       contents: read
       packages: write
       id-token: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Checkout repository
@@ -38,8 +41,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build and push Docker image
-        id: build-and-push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -49,29 +51,11 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
+    name: Auto deploy
+    if: github.event_name == 'release'
     needs: build-and-push
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          REGISTRY_USER: ${{ github.actor }}
-          TOKEN: ${{ secrets.CR_PAT }}
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: TAG,REGISTRY_USER,TOKEN
-          script: |
-            echo $TOKEN | docker login ghcr.io -u $REGISTRY_USER --password-stdin
-
-            cd ${{ secrets.DEPLOY_PATH }}
-
-            docker compose --profile prod pull
-            docker compose --profile prod up -d
-
-            docker system prune -a -f
-
-            docker logout ghcr.io
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: ${{ github.event.release.prerelease && 'stage' || 'my-prod' }}
+      tag: ${{ needs.build-and-push.outputs.version }}
+    secrets: inherit

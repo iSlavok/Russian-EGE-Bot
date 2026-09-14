@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Куда деплоить
+        type: choice
+        required: true
+        options:
+          - stage
+          - my-prod
+          - 100b-prod
+      tag:
+        description: Тег образа (например 1.4.2)
+        type: string
+        required: true
+        default: latest
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.tag }} to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.DEPLOY_URL }}
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          TOKEN: ${{ secrets.CR_PAT }}
+          IMAGE_TAG: ${{ inputs.tag }}
+          COMPOSE_PROFILE: ${{ vars.COMPOSE_PROFILE }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ vars.SSH_PORT || 22 }}
+          envs: REGISTRY_USER,TOKEN,IMAGE_TAG,COMPOSE_PROFILE,DEPLOY_PATH
+          script_stop: true
+          script: |
+            echo "$TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+            cd "$DEPLOY_PATH"
+            export IMAGE_TAG
+            docker compose --profile "$COMPOSE_PROFILE" pull
+            docker compose --profile "$COMPOSE_PROFILE" up -d
+            docker image prune -f
+            docker logout ghcr.io
