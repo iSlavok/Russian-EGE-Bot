@@ -183,13 +183,10 @@ class ExerciseRepository(BaseRepository[Exercise]):
             .subquery()
         )
 
-        distinct_group = func.coalesce(
-            Exercise.group_id.cast(String),
-            func.gen_random_uuid().cast(String),
-        )
+        group_key = func.coalesce(Exercise.group_id.cast(String), func.concat("n", Exercise.id))
 
-        statement = (
-            select(Exercise)
+        candidates = (
+            select(Exercise.id)
             .outerjoin(seen_groups_sq, Exercise.group_id == seen_groups_sq.c.group_id)
             .outerjoin(seen_exercises_sq, Exercise.id == seen_exercises_sq.c.exercise_id)
             .where(
@@ -202,15 +199,22 @@ class ExerciseRepository(BaseRepository[Exercise]):
             )
         )
         if filters:
-            statement = statement.where(*filters)
-        statement = (
-            statement
-            .distinct(distinct_group)
-            .order_by(distinct_group, func.random())
+            candidates = candidates.where(*filters)
+
+        one_per_group = (
+            candidates
+            .distinct(group_key)
+            .order_by(group_key, func.random())
+            .subquery()
+        )
+        chosen = (
+            select(one_per_group.c.id)
+            .order_by(func.random())
             .limit(limit)
+            .subquery()
         )
 
-        result = await self.session.execute(statement)
+        result = await self.session.execute(select(Exercise).join(chosen, Exercise.id == chosen.c.id))
         return result.scalars().all()
 
     async def get_random_by_group_ids(
