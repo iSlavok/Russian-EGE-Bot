@@ -11,6 +11,11 @@ if TYPE_CHECKING:
     from app.models import Category, Exercise, UserAnswer
 
 
+TG_USERNAME_MAX_LEN = 32
+TG_NAME_PART_MAX_LEN = 64
+TG_FULL_NAME_MAX_LEN = TG_NAME_PART_MAX_LEN * 2 + 1
+
+
 user_current_exercises = Table(
     "user_current_exercises",
     BaseDBModel.metadata,
@@ -21,8 +26,8 @@ user_current_exercises = Table(
 
 class User(BaseDBModel):
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
-    username: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    full_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    username: Mapped[str | None] = mapped_column(String(TG_USERNAME_MAX_LEN), nullable=True)
+    full_name: Mapped[str] = mapped_column(String(TG_FULL_NAME_MAX_LEN), nullable=False)
 
     exercise_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     current_task_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
