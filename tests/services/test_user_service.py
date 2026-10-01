@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enums import HandlerType
 from app.exceptions import UserNotFoundError
@@ -110,7 +111,7 @@ class TestConcurrentCreation:
 
     @staticmethod
     def _service_losing_the_race(existing):
-        session = AsyncMock()
+        session = AsyncMock(spec=AsyncSession)
         session.commit.side_effect = IntegrityError("INSERT", {}, Exception("duplicate key"))
         repository = AsyncMock()
         repository.get_by_telegram_id_with_exercises.side_effect = [None, existing]
@@ -131,7 +132,7 @@ class TestConcurrentCreation:
         session.rollback.assert_awaited_once()
 
     async def test_reraises_when_the_user_is_still_missing(self):
-        session = AsyncMock()
+        session = AsyncMock(spec=AsyncSession)
         session.commit.side_effect = IntegrityError("INSERT", {}, Exception("duplicate key"))
         repository = AsyncMock()
         repository.get_by_telegram_id_with_exercises.return_value = None
