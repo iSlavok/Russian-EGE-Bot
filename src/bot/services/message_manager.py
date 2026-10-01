@@ -7,6 +7,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputRichMessage, Message, ReplyMarkupUnion
+from loguru import logger
 
 _user_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
 
@@ -207,21 +208,38 @@ class MessageManager:
 
     async def _clear_messages(self, data: dict, keep_bot_last: int) -> None:
         bot_messages = self._get_bot_messages(data)
-        while len(bot_messages) > keep_bot_last:
-            message_id = bot_messages.pop(0)
-
-            try:
-                await self.bot.delete_message(self.chat_id, message_id)
-            except TelegramBadRequest:
-                with suppress(TelegramBadRequest):
-                    await self.bot.edit_message_text(
-                        chat_id=self.chat_id,
-                        message_id=message_id,
-                        text="[Сообщение устарело]",
-                    )
-
         user_messages = self._get_user_messages(data)
-        while user_messages:
-            msg_id = user_messages.pop(0)
+
+        stale_bot_ids = bot_messages[: max(len(bot_messages) - keep_bot_last, 0)]
+        del bot_messages[: len(stale_bot_ids)]
+
+        stale_user_ids = list(user_messages)
+        user_messages.clear()
+
+        if not stale_bot_ids and not stale_user_ids:
+            return
+
+        results = await asyncio.gather(
+            *(self._delete_bot_message(msg_id) for msg_id in stale_bot_ids),
+            *(self._delete_message(msg_id) for msg_id in stale_user_ids),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning("Failed to clear message: {!r}", result)
+
+    async def _delete_bot_message(self, message_id: int) -> None:
+        """Удаляет сообщение бота; если удалить нельзя (старше 48ч) — помечает его устаревшим."""
+        try:
+            await self.bot.delete_message(self.chat_id, message_id)
+        except TelegramBadRequest:
             with suppress(TelegramBadRequest):
-                await self.bot.delete_message(self.chat_id, msg_id)
+                await self.bot.edit_message_text(
+                    chat_id=self.chat_id,
+                    message_id=message_id,
+                    text="[Сообщение устарело]",
+                )
+
+    async def _delete_message(self, message_id: int) -> None:
+        with suppress(TelegramBadRequest):
+            await self.bot.delete_message(self.chat_id, message_id)
