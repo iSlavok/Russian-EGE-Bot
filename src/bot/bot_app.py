@@ -13,7 +13,12 @@ from redis.asyncio.client import Redis
 
 from app.config import redis_settings, settings, shutdown_logging
 from bot.handlers import category_router, main_router, profile_router, task_router
-from bot.middlewares import ErrorHandlerMiddleware, MessageManagerMiddleware, UserMiddleware
+from bot.middlewares import (
+    ErrorHandlerMiddleware,
+    MessageManagerMiddleware,
+    UserMiddleware,
+    handle_unexpected_error,
+)
 from bot.utils import run_limiter_cleanup, setup_rate_limiter
 
 
@@ -47,6 +52,8 @@ async def start_bot(app_container: AsyncContainer) -> None:
 
     dp.message.middleware(user_middleware)
     dp.callback_query.middleware(user_middleware)
+
+    dp.errors.register(handle_unexpected_error)
 
     dp.include_router(main_router)
     dp.include_router(profile_router)
