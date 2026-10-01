@@ -8,7 +8,7 @@ from dishka.integrations.aiogram import setup_dishka
 from loguru import logger
 from redis.asyncio.client import Redis
 
-from app.config import redis_settings, settings
+from app.config import redis_settings, settings, shutdown_logging
 from bot.handlers import category_router, main_router, profile_router, task_router
 from bot.middlewares import ErrorHandlerMiddleware, MessageManagerMiddleware, UserMiddleware
 
@@ -62,3 +62,4 @@ async def start_bot(app_container: AsyncContainer) -> None:
         logger.info("Shutting down bot...")
         await app_container.close()
         logger.info("Bot stopped")
+        await shutdown_logging()
