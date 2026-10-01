@@ -24,18 +24,20 @@ class ExerciseRepository(BaseRepository[Exercise]):
         Пустой результат означает, что все задачи в категории решены хотя бы раз.
         Если distinct_on_answer=True — DISTINCT ON (answer), по 1 случайному unseen на тип.
         """
-        answered_sq = (
-            select(UserAnswer.exercise_id)
-            .where(UserAnswer.user_id == user_id)
-            .distinct()
-            .subquery()
+        answered = (
+            select(UserAnswer.id)
+            .where(
+                UserAnswer.user_id == user_id,
+                UserAnswer.exercise_id == Exercise.id,
+            )
+            .exists()
         )
         statement = (
             select(Exercise)
             .where(
                 Exercise.category_id == category_id,
                 Exercise.is_active.is_(True),
-                Exercise.id.notin_(select(answered_sq.c.exercise_id)),
+                ~answered,
             )
         )
         if filters:
