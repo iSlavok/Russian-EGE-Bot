@@ -1,7 +1,9 @@
+import gc
+
 import pytest
 from aiogram.exceptions import TelegramBadRequest
 
-from bot.services.message_manager import MessageManager
+from bot.services.message_manager import MessageManager, _user_locks
 
 from .conftest import FakeFSMContext, make_message
 
@@ -159,3 +161,31 @@ class TestSendRich:
         assert kwargs["rich_message"].skip_entity_detection is True
         data = await fake_state.get_data()
         assert 200 in data["bot_messages"]
+
+
+class TestUserLocks:
+    async def test_same_chat_shares_one_lock(self, mock_bot, fake_state):
+        msg = make_message(message_id=1, chat_id=777)
+        first = MessageManager(bot=mock_bot, chat_id=777, state=fake_state, message=msg)
+        second = MessageManager(bot=mock_bot, chat_id=777, state=fake_state, message=msg)
+
+        assert first._lock is second._lock
+
+    async def test_different_chats_get_different_locks(self, mock_bot, fake_state):
+        msg = make_message(message_id=1, chat_id=1)
+        first = MessageManager(bot=mock_bot, chat_id=1, state=fake_state, message=msg)
+        second = MessageManager(bot=mock_bot, chat_id=2, state=fake_state, message=msg)
+
+        assert first._lock is not second._lock
+
+    async def test_lock_is_released_when_manager_is_gone(self, mock_bot, fake_state):
+        """5к юзеров не должны оставлять 5к вечных Lock-ов в глобальном словаре."""
+        chat_id = 999_001
+        msg = make_message(message_id=1, chat_id=chat_id)
+        manager = MessageManager(bot=mock_bot, chat_id=chat_id, state=fake_state, message=msg)
+        assert chat_id in _user_locks
+
+        del manager
+        gc.collect()
+
+        assert chat_id not in _user_locks

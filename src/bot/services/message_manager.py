@@ -1,14 +1,28 @@
 import asyncio
-from collections import defaultdict
 from contextlib import suppress
 from typing import Any, Self, cast
+from weakref import WeakValueDictionary
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputRichMessage, Message, ReplyMarkupUnion
 
-_user_locks = defaultdict(asyncio.Lock)
+_user_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
+
+
+def _get_user_lock(chat_id: int) -> asyncio.Lock:
+    """Лок на чат, разделяемый живыми MessageManager-ами.
+
+    WeakValueDictionary: запись исчезает сама, как только последний менеджер этого чата
+    собран GC, поэтому словарь не растёт с числом юзеров. Между get и записью нет await,
+    так что для одного event loop это атомарно.
+    """
+    lock = _user_locks.get(chat_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _user_locks[chat_id] = lock
+    return lock
 
 
 class MessageManager:
@@ -17,7 +31,7 @@ class MessageManager:
         self.chat_id = chat_id
         self.state = state
         self.message = message
-        self._lock = _user_locks[chat_id]
+        self._lock = _get_user_lock(chat_id)
 
         self._bot_messages_key = "bot_messages"
         self._user_messages_key = "user_messages"
