@@ -10,7 +10,6 @@ class BaseDBModel(DeclarativeBase):
         Integer,
         primary_key=True,
         autoincrement=True,
-        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
