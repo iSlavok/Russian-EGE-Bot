@@ -23,11 +23,12 @@ def setup_logging() -> None:
     logger.add(
         "logs/bot.log",
         format=log_format,
-        level="DEBUG",
+        level="INFO",
         rotation="10 MB",
         retention="7 days",
         compression="zip",
         encoding="utf-8",
+        enqueue=True,
     )
 
     logger.add(
@@ -38,4 +39,10 @@ def setup_logging() -> None:
         retention="30 days",
         compression="zip",
         encoding="utf-8",
+        enqueue=True,
     )
+
+
+async def shutdown_logging() -> None:
+    """Дожидается, пока фоновый писатель loguru (enqueue=True) сбросит очередь на диск."""
+    await logger.complete()

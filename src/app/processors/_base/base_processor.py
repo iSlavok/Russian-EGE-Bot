@@ -16,6 +16,8 @@ from app.schemas import CategoryDTO, CheckResult, ExerciseDTO, TaskResponse, Use
 from app.schemas.user_schemas import UserWithCategoryDTO
 from app.services.exercise_selector import ExerciseSelector
 
+MAX_SOLVE_TIME = 600
+
 
 class BaseTaskProcessor(ABC, TaskProcessor):
     def __init__(
@@ -73,11 +75,16 @@ class BaseTaskProcessor(ABC, TaskProcessor):
 
     @staticmethod
     def _compute_solve_time(user: UserWithExercisesDTO) -> int:
-        """Computes the time in seconds since the exercise was started."""
+        """Время в секундах с начала решения, обрезанное сверху MAX_SOLVE_TIME.
+
+        Без ограничения брошенное и открытое через неделю задание даёт solve_time
+        в сотни тысяч секунд, что портит avg_solve_time в Thompson-скоринге.
+        """
         started = user.exercise_started_at
         if not started:
             return 0
-        return int((datetime.now(UTC) - started).total_seconds())
+        elapsed = int((datetime.now(UTC) - started).total_seconds())
+        return min(max(elapsed, 0), MAX_SOLVE_TIME)
 
     def _record_answer(
         self,
@@ -113,9 +120,7 @@ class BaseTaskProcessor(ABC, TaskProcessor):
 
         is_correct = user_answer == exercise.answer
 
-        solve_start_at = user.exercise_started_at
-        now = datetime.now(UTC)
-        solve_time = int((now - solve_start_at).total_seconds()) if solve_start_at else 0
+        solve_time = self._compute_solve_time(user)
         answer = UserAnswer(
             is_correct=is_correct,
             user_response=user_answer,

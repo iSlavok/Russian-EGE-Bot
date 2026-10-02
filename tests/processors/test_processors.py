@@ -1,8 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.enums import HandlerType
+from app.processors._base.base_processor import MAX_SOLVE_TIME
 from app.processors.tasks.generic import SkipProcessor, SoonProcessor
 from app.processors.tasks.task_01 import Task1DrillProcessor
 from app.processors.tasks.task_02 import Task2DrillProcessor
@@ -510,6 +511,27 @@ class TestBaseProcessorHelpers:
         dto.exercise_started_at = None
         t = processor._compute_solve_time(dto)
         assert t == 0
+
+    async def test_compute_solve_time_clamped_for_abandoned_task(
+        self, processor_factory, user_factory, category_factory,
+    ):
+        """Брошенное и открытое через неделю задание не должно давать solve_time в сутках."""
+        processor = processor_factory.get_processor(HandlerType.TASK_1_DRILL)
+        user = await user_factory()
+        cat = await category_factory()
+        dto = _user_with_exercises_dto(user, cat, [])
+        dto.exercise_started_at = datetime.now(UTC) - timedelta(days=7)
+        assert processor._compute_solve_time(dto) == MAX_SOLVE_TIME
+
+    async def test_compute_solve_time_below_cap_is_exact(
+        self, processor_factory, user_factory, category_factory,
+    ):
+        processor = processor_factory.get_processor(HandlerType.TASK_1_DRILL)
+        user = await user_factory()
+        cat = await category_factory()
+        dto = _user_with_exercises_dto(user, cat, [])
+        dto.exercise_started_at = datetime.now(UTC) - timedelta(seconds=42)
+        assert processor._compute_solve_time(dto) == 42
 
     async def test_process_answer_single_exercise_no_exercises_raises(self, processor_factory):
         from app.exceptions import NoCurrentExercisesError

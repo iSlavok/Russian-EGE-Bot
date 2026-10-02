@@ -1,6 +1,6 @@
 from .config import settings
 from .database_config import database_settings
-from .logging_config import setup_logging
+from .logging_config import setup_logging, shutdown_logging
 from .redis_config import redis_settings
 
 __all__ = [
@@ -8,4 +8,5 @@ __all__ = [
     "redis_settings",
     "settings",
     "setup_logging",
+    "shutdown_logging",
 ]

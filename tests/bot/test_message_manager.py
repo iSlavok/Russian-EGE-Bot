@@ -1,7 +1,10 @@
-import pytest
-from aiogram.exceptions import TelegramBadRequest
+import asyncio
+import gc
 
-from bot.services.message_manager import MessageManager
+import pytest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
+
+from bot.services.message_manager import MessageManager, _user_locks
 
 from .conftest import FakeFSMContext, make_message
 
@@ -159,3 +162,81 @@ class TestSendRich:
         assert kwargs["rich_message"].skip_entity_detection is True
         data = await fake_state.get_data()
         assert 200 in data["bot_messages"]
+
+
+# ── parallel cleanup + lock lifecycle ───────────────────────────────────────
+
+
+class TestClearMessagesConcurrency:
+    async def test_deletes_run_concurrently(self, manager, mock_bot, fake_state):
+        """Удаления идут через gather, а не по одному — иначе каждая чистка это N round-trip'ов."""
+        in_flight = 0
+        peak = 0
+
+        async def slow_delete(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            return True
+
+        mock_bot.delete_message.side_effect = slow_delete
+        await fake_state.update_data(bot_messages=[10, 20, 30], user_messages=[5, 6])
+
+        await manager.clear_messages(keep_bot_last=0)
+
+        assert peak == 5
+        assert mock_bot.delete_message.await_count == 5
+
+    async def test_unexpected_delete_error_does_not_break_cleanup(self, mock_bot, fake_state):
+        mock_bot.delete_message.side_effect = [TelegramNetworkError(method=None, message="boom"), True]
+        msg = make_message(message_id=1, chat_id=123)
+        manager = MessageManager(bot=mock_bot, chat_id=123, state=fake_state, message=msg)
+        await fake_state.update_data(bot_messages=[], user_messages=[5, 6])
+
+        await manager.clear_messages()
+
+        data = await fake_state.get_data()
+        assert data["user_messages"] == []
+        assert mock_bot.delete_message.await_count == 2
+
+    async def test_ids_are_dropped_even_if_deletion_fails(self, mock_bot, fake_state):
+        """Иначе упавший id остаётся в state и бот пытается удалить его на каждой чистке."""
+        mock_bot.delete_message.side_effect = TelegramNetworkError(method=None, message="boom")
+        msg = make_message(message_id=1, chat_id=123)
+        manager = MessageManager(bot=mock_bot, chat_id=123, state=fake_state, message=msg)
+        await fake_state.update_data(bot_messages=[10, 20], user_messages=[])
+
+        await manager.clear_messages(keep_bot_last=1)
+
+        data = await fake_state.get_data()
+        assert data["bot_messages"] == [20]
+
+
+class TestUserLocks:
+    async def test_same_chat_shares_one_lock(self, mock_bot, fake_state):
+        msg = make_message(message_id=1, chat_id=777)
+        first = MessageManager(bot=mock_bot, chat_id=777, state=fake_state, message=msg)
+        second = MessageManager(bot=mock_bot, chat_id=777, state=fake_state, message=msg)
+
+        assert first._lock is second._lock
+
+    async def test_different_chats_get_different_locks(self, mock_bot, fake_state):
+        msg = make_message(message_id=1, chat_id=1)
+        first = MessageManager(bot=mock_bot, chat_id=1, state=fake_state, message=msg)
+        second = MessageManager(bot=mock_bot, chat_id=2, state=fake_state, message=msg)
+
+        assert first._lock is not second._lock
+
+    async def test_lock_is_released_when_manager_is_gone(self, mock_bot, fake_state):
+        """5к юзеров не должны оставлять 5к вечных Lock-ов в глобальном словаре."""
+        chat_id = 999_001
+        msg = make_message(message_id=1, chat_id=chat_id)
+        manager = MessageManager(bot=mock_bot, chat_id=chat_id, state=fake_state, message=msg)
+        assert chat_id in _user_locks
+
+        del manager
+        gc.collect()
+
+        assert chat_id not in _user_locks

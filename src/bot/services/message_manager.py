@@ -1,14 +1,29 @@
 import asyncio
-from collections import defaultdict
 from contextlib import suppress
 from typing import Any, Self, cast
+from weakref import WeakValueDictionary
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputRichMessage, Message, ReplyMarkupUnion
+from loguru import logger
 
-_user_locks = defaultdict(asyncio.Lock)
+_user_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
+
+
+def _get_user_lock(chat_id: int) -> asyncio.Lock:
+    """Лок на чат, разделяемый живыми MessageManager-ами.
+
+    WeakValueDictionary: запись исчезает сама, как только последний менеджер этого чата
+    собран GC, поэтому словарь не растёт с числом юзеров. Между get и записью нет await,
+    так что для одного event loop это атомарно.
+    """
+    lock = _user_locks.get(chat_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _user_locks[chat_id] = lock
+    return lock
 
 
 class MessageManager:
@@ -17,7 +32,7 @@ class MessageManager:
         self.chat_id = chat_id
         self.state = state
         self.message = message
-        self._lock = _user_locks[chat_id]
+        self._lock = _get_user_lock(chat_id)
 
         self._bot_messages_key = "bot_messages"
         self._user_messages_key = "user_messages"
@@ -193,21 +208,38 @@ class MessageManager:
 
     async def _clear_messages(self, data: dict, keep_bot_last: int) -> None:
         bot_messages = self._get_bot_messages(data)
-        while len(bot_messages) > keep_bot_last:
-            message_id = bot_messages.pop(0)
-
-            try:
-                await self.bot.delete_message(self.chat_id, message_id)
-            except TelegramBadRequest:
-                with suppress(TelegramBadRequest):
-                    await self.bot.edit_message_text(
-                        chat_id=self.chat_id,
-                        message_id=message_id,
-                        text="[Сообщение устарело]",
-                    )
-
         user_messages = self._get_user_messages(data)
-        while user_messages:
-            msg_id = user_messages.pop(0)
+
+        stale_bot_ids = bot_messages[: max(len(bot_messages) - keep_bot_last, 0)]
+        del bot_messages[: len(stale_bot_ids)]
+
+        stale_user_ids = list(user_messages)
+        user_messages.clear()
+
+        if not stale_bot_ids and not stale_user_ids:
+            return
+
+        results = await asyncio.gather(
+            *(self._delete_bot_message(msg_id) for msg_id in stale_bot_ids),
+            *(self._delete_message(msg_id) for msg_id in stale_user_ids),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning("Failed to clear message: {!r}", result)
+
+    async def _delete_bot_message(self, message_id: int) -> None:
+        """Удаляет сообщение бота; если удалить нельзя (старше 48ч) — помечает его устаревшим."""
+        try:
+            await self.bot.delete_message(self.chat_id, message_id)
+        except TelegramBadRequest:
             with suppress(TelegramBadRequest):
-                await self.bot.delete_message(self.chat_id, msg_id)
+                await self.bot.edit_message_text(
+                    chat_id=self.chat_id,
+                    message_id=message_id,
+                    text="[Сообщение устарело]",
+                )
+
+    async def _delete_message(self, message_id: int) -> None:
+        with suppress(TelegramBadRequest):
+            await self.bot.delete_message(self.chat_id, message_id)

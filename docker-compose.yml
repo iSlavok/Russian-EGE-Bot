@@ -18,7 +18,7 @@ services:
     networks: [ bot_network ]
 
   bot-prod:
-    image: ghcr.io/islavok/russian-ege-bot:latest
+    image: ghcr.io/islavok/russian-ege-bot:${IMAGE_TAG:-latest}
     profiles: [ "prod" ]
     restart: unless-stopped
     env_file:

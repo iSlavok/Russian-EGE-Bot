@@ -11,7 +11,11 @@ class DatabaseSettings(BaseSettings):
     USER: str
     PASS: SecretStr
     DRIVER: str = "postgresql+asyncpg"
-    POOL_SIZE: int = 5
+
+    POOL_SIZE: int = 20
+    MAX_OVERFLOW: int = 30
+    POOL_TIMEOUT: int = 10
+    POOL_RECYCLE: int = 1800
 
 
 database_settings = DatabaseSettings()  # type: ignore[call-arg]
