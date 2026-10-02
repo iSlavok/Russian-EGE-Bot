@@ -17,7 +17,7 @@ from bot.utils.aiogram_rate_limiter import (
     RateLimitMiddleware,
 )
 from bot.utils.smart_limiter_cache import SmartLimiterCache
-from bot.utils.strict_rate_limiter import StrictRateLimiter
+from bot.utils.token_bucket_limiter import TokenBucketLimiter
 
 FAKE_BOT = cast("Bot", object())
 
@@ -51,39 +51,77 @@ class TestMethodSets:
             assert name not in SEND_METHODS | RELAXED_METHODS
 
 
-class TestStrictRateLimiter:
-    @pytest.mark.parametrize(("rate", "period"), [(0, 1.0), (-1, 1.0), (1, 0.0), (1, -1.0)])
-    def test_rejects_non_positive_args(self, rate: int, period: float):
+class TestTokenBucketLimiter:
+    @pytest.mark.parametrize(
+        ("rate", "period", "burst"),
+        [(0, 1.0, None), (-1, 1.0, None), (1, 0.0, None), (1, -1.0, None), (1, 1.0, 0), (1, 1.0, -5)],
+    )
+    def test_rejects_non_positive_args(self, rate: int, period: float, burst: int | None):
         with pytest.raises(ValueError, match="must be positive"):
-            StrictRateLimiter(rate, period)
+            TokenBucketLimiter(rate, period, burst)
+
+    def test_burst_defaults_to_rate(self):
+        assert TokenBucketLimiter(rate=7, period=1.0).burst == pytest.approx(7)
+
+    def test_starts_full(self):
+        limiter = TokenBucketLimiter(rate=1, period=1.0, burst=5)
+        assert limiter.tokens == pytest.approx(5, abs=0.01)
 
     async def test_first_acquire_is_immediate(self):
-        limiter = StrictRateLimiter(rate=1, period=10.0)
+        limiter = TokenBucketLimiter(rate=1, period=10.0)
         started = monotonic()
         await limiter.acquire()
         assert monotonic() - started < 0.05
 
-    async def test_spaces_out_sequential_acquires(self):
-        limiter = StrictRateLimiter(rate=20, period=1.0)  # 50ms apart
+    async def test_burst_passes_without_waiting(self):
+        """Главное отличие от фиксированного интервала: всплеск не платит за каждый запрос."""
+        limiter = TokenBucketLimiter(rate=1, period=1.0, burst=5)
         started = monotonic()
+        for _ in range(5):
+            await limiter.acquire()
+        assert monotonic() - started < 0.05
+
+    async def test_throttles_once_burst_is_spent(self):
+        limiter = TokenBucketLimiter(rate=10, period=1.0, burst=2)
+        for _ in range(2):
+            await limiter.acquire()
+        started = monotonic()
+        await limiter.acquire()
+        assert monotonic() - started >= 0.08
+
+    async def test_holds_average_rate_over_a_long_run(self):
+        limiter = TokenBucketLimiter(rate=20, period=1.0, burst=2)
+        started = monotonic()
+        for _ in range(8):
+            await limiter.acquire()
+        elapsed = monotonic() - started
+        assert elapsed >= 0.25
+        assert elapsed < 0.6
+
+    async def test_bucket_refills_while_idle(self):
+        limiter = TokenBucketLimiter(rate=20, period=1.0, burst=3)
         for _ in range(3):
             await limiter.acquire()
-        assert monotonic() - started >= 0.1
+        await asyncio.sleep(0.15)
+        started = monotonic()
+        for _ in range(2):
+            await limiter.acquire()
+        assert monotonic() - started < 0.05
 
-    async def test_spaces_out_concurrent_acquires(self):
-        limiter = StrictRateLimiter(rate=20, period=1.0)
+    async def test_concurrent_acquires_share_the_bucket(self):
+        limiter = TokenBucketLimiter(rate=20, period=1.0, burst=2)
         started = monotonic()
         await asyncio.gather(*(limiter.acquire() for _ in range(4)))
-        assert monotonic() - started >= 0.15
+        assert monotonic() - started >= 0.08
 
     async def test_works_as_context_manager(self):
-        limiter = StrictRateLimiter(rate=20, period=1.0)
+        limiter = TokenBucketLimiter(rate=20, period=1.0, burst=1)
         started = monotonic()
         async with limiter:
             pass
         async with limiter:
             pass
-        assert monotonic() - started >= 0.05
+        assert monotonic() - started >= 0.04
 
 
 class TestSmartLimiterCache:
@@ -93,8 +131,13 @@ class TestSmartLimiterCache:
 
     def test_private_and_group_get_different_rates(self):
         cache = SmartLimiterCache(private_rate=1, private_period=1.0, group_rate=20, group_period=60.0)
-        assert cache.get(5).min_interval == pytest.approx(1.0)
-        assert cache.get(-5).min_interval == pytest.approx(3.0)
+        assert cache.get(5).refill_rate == pytest.approx(1.0)
+        assert cache.get(-5).refill_rate == pytest.approx(20 / 60)
+
+    def test_private_and_group_get_their_own_burst(self):
+        cache = SmartLimiterCache(private_burst=5, group_burst=12)
+        assert cache.get(5).burst == pytest.approx(5)
+        assert cache.get(-5).burst == pytest.approx(12)
 
     def test_lru_evicts_oldest(self):
         cache = SmartLimiterCache(maxsize=2)
@@ -174,7 +217,23 @@ class TestRateLimitMiddlewareBuckets:
         relaxed = mw._chat_limiter("DeleteMessage", 111)  # noqa: SLF001
         assert send is not None
         assert relaxed is not None
-        assert relaxed.min_interval == pytest.approx(send.min_interval / 5)
+        assert relaxed.refill_rate == pytest.approx(send.refill_rate * 5)
+        assert relaxed.burst == pytest.approx(send.burst * 5)
+
+    def test_defaults_allow_a_whole_user_action_without_waiting(self):
+        """Одно нажатие — это несколько вызовов в один чат; все должны пройти из ведра."""
+        mw = RateLimitMiddleware()
+        send = mw._chat_limiter("SendRichMessage", 111)  # noqa: SLF001
+        relaxed = mw._chat_limiter("DeleteMessage", 111)  # noqa: SLF001
+        assert send is not None
+        assert relaxed is not None
+        assert send.burst >= 2
+        assert relaxed.burst >= 5
+
+    def test_global_peak_stays_under_telegram_limit(self):
+        """Пик ведра за скользящую секунду — burst + rate, а не rate."""
+        limiter = RateLimitMiddleware()._global_limiter  # noqa: SLF001
+        assert limiter.burst + limiter.refill_rate <= 30
 
     def test_unknown_method_gets_no_chat_limiter(self):
         mw = RateLimitMiddleware()
@@ -234,15 +293,46 @@ class TestRateLimitMiddlewareCall:
         await asyncio.gather(*(mw(make_request, FAKE_BOT, delete_message()) for _ in range(3)))
         assert monotonic() - started < 0.5
 
-    async def test_sends_to_same_chat_are_paced(self):
-        mw = RateLimitMiddleware(private_chat_rate=10, private_chat_period=1.0)
+    async def test_sends_to_same_chat_are_paced_once_burst_is_spent(self):
+        mw = RateLimitMiddleware(private_chat_rate=10, private_chat_period=1.0, private_chat_burst=1)
 
         async def make_request(bot, method):  # noqa: ANN001, ANN202, ARG001
             return True
 
         started = monotonic()
         await asyncio.gather(*(mw(make_request, FAKE_BOT, send_message()) for _ in range(3)))
-        assert monotonic() - started >= 0.2
+        assert monotonic() - started >= 0.15
+
+    async def test_one_user_action_is_not_slowed_down(self):
+        """Регрессия: фиксированный интервал добавлял ~1с между результатом и новым заданием."""
+        mw = RateLimitMiddleware()
+
+        async def make_request(bot, method):  # noqa: ANN001, ANN202, ARG001
+            return True
+
+        action = [
+            delete_message(),
+            delete_message(),
+            send_message(),
+            delete_message(),
+            send_message(),
+            AnswerCallbackQuery(callback_query_id="x"),
+        ]
+        started = monotonic()
+        for method in action:
+            await mw(make_request, FAKE_BOT, method)
+        assert monotonic() - started < 0.1
+
+    async def test_sustained_flood_to_one_chat_is_still_throttled(self):
+        mw = RateLimitMiddleware(private_chat_rate=1, private_chat_period=1.0, private_chat_burst=3)
+
+        async def make_request(bot, method):  # noqa: ANN001, ANN202, ARG001
+            return True
+
+        started = monotonic()
+        for _ in range(5):
+            await mw(make_request, FAKE_BOT, send_message())
+        assert monotonic() - started >= 1.9
 
     async def test_retries_after_flood_error(self):
         mw = RateLimitMiddleware(max_retries=3)

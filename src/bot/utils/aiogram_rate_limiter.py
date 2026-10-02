@@ -7,6 +7,14 @@ Telegram API limits:
   live in a far more permissive bucket)
 - Groups/channels: ~20 messages/minute per chat
 
+Все лимиты здесь — token bucket, а не фиксированный интервал. Телеграмовские
+лимиты средние: 429 приходит за устойчивое превышение, а не за два сообщения
+подряд. Бот же на одно действие юзера делает несколько вызовов в один чат
+(удалить старое, отправить результат, отправить следующее задание), поэтому
+фиксированный интервал добавлял бы по секунде к каждому нажатию. Ведро
+пропускает такой всплеск сразу и начинает притормаживать только того, кто
+превышает средний темп.
+
 Two independent per-chat buckets are used, because throttling edits and deletes
 at the send rate would make every UI interaction take seconds: `SEND_METHODS`
 gets the strict per-chat rate, `RELAXED_METHODS` gets a multiple of it.
@@ -30,7 +38,7 @@ from aiogram.methods.base import TelegramType
 from loguru import logger
 
 from bot.utils.smart_limiter_cache import SmartLimiterCache
-from bot.utils.strict_rate_limiter import StrictRateLimiter
+from bot.utils.token_bucket_limiter import TokenBucketLimiter
 
 RETRY_AFTER_BUFFER = 0.5
 
@@ -87,14 +95,19 @@ class FloodGate:
 
 
 class RateLimitMiddleware(BaseRequestMiddleware):
-    """Пропускает запросы к Bot API через глобальный и два по-чатовых лимитера.
+    """Пропускает запросы к Bot API через глобальное и два по-чатовых ведра.
 
     :param global_rate: запросов за global_period по всем чатам (лимит Telegram — 30/с).
     :param global_period: окно глобального лимита в секундах.
+    :param global_burst: сколько запросов подряд пропустить после простоя. Пик ведра
+        в скользящем окне — global_burst + global_rate, поэтому сумма держится
+        не выше телеграмовских 30/с.
     :param private_chat_rate: новых сообщений за период в приватный чат.
     :param private_chat_period: окно по-чатового лимита для приватных чатов.
+    :param private_chat_burst: запас сообщений на одно действие юзера в приватном чате.
     :param group_chat_rate: новых сообщений за период в группу/канал.
     :param group_chat_period: окно по-чатового лимита для групп.
+    :param group_chat_burst: запас сообщений для группы.
     :param relaxed_multiplier: во сколько раз правка/удаление быстрее отправки.
     :param max_cache_size: сколько по-чатовых лимитеров держать (LRU).
     :param cache_ttl: через сколько секунд простоя лимитер чата выбрасывается.
@@ -105,10 +118,13 @@ class RateLimitMiddleware(BaseRequestMiddleware):
         self,
         global_rate: int = 25,
         global_period: float = 1.0,
+        global_burst: int = 5,
         private_chat_rate: int = 1,
         private_chat_period: float = 1.0,
+        private_chat_burst: int = 5,
         group_chat_rate: int = 20,
         group_chat_period: float = 60.0,
+        group_chat_burst: int = 20,
         relaxed_multiplier: int = 5,
         max_cache_size: int = 10_000,
         cache_ttl: int = 300,
@@ -116,29 +132,33 @@ class RateLimitMiddleware(BaseRequestMiddleware):
     ) -> None:
         self._max_retries = max_retries
         self._flood_gate = FloodGate()
-        self._global_limiter = StrictRateLimiter(global_rate, global_period)
+        self._global_limiter = TokenBucketLimiter(global_rate, global_period, global_burst)
         self._send_limiters = SmartLimiterCache(
             maxsize=max_cache_size,
             ttl_seconds=cache_ttl,
             private_rate=private_chat_rate,
             private_period=private_chat_period,
+            private_burst=private_chat_burst,
             group_rate=group_chat_rate,
             group_period=group_chat_period,
+            group_burst=group_chat_burst,
         )
         self._relaxed_limiters = SmartLimiterCache(
             maxsize=max_cache_size,
             ttl_seconds=cache_ttl,
             private_rate=private_chat_rate * relaxed_multiplier,
             private_period=private_chat_period,
+            private_burst=private_chat_burst * relaxed_multiplier,
             group_rate=group_chat_rate * relaxed_multiplier,
             group_period=group_chat_period,
+            group_burst=group_chat_burst * relaxed_multiplier,
         )
 
     def cleanup_expired(self) -> int:
         """Выбрасывает лимитеры чатов, не использованные дольше cache_ttl."""
         return self._send_limiters.cleanup_expired() + self._relaxed_limiters.cleanup_expired()
 
-    def _chat_limiter(self, method_name: str, chat_id: int | None) -> StrictRateLimiter | None:
+    def _chat_limiter(self, method_name: str, chat_id: int | None) -> TokenBucketLimiter | None:
         if chat_id is None:
             return None
         if method_name in SEND_METHODS:
