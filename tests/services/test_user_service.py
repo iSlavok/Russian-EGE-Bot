@@ -1,4 +1,8 @@
+from unittest.mock import AsyncMock
+
 import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enums import HandlerType
 from app.exceptions import UserNotFoundError
@@ -99,3 +103,44 @@ class TestSelectCategory:
 
         with pytest.raises(UserNotFoundError):
             await user_service.select_category(user_dto, cat_dto)
+
+
+class TestConcurrentCreation:
+    """Апдейты обрабатываются aiogram параллельно: два подряд от нового юзера
+    оба проходят проверку "юзера нет" и оба делают INSERT."""
+
+    @staticmethod
+    def _service_losing_the_race(existing):
+        session = AsyncMock(spec=AsyncSession)
+        session.commit.side_effect = IntegrityError("INSERT", {}, Exception("duplicate key"))
+        repository = AsyncMock()
+        repository.get_by_telegram_id_with_exercises.side_effect = [None, existing]
+        return UserService(
+            session=session,
+            user_repository=repository,
+            category_repository=AsyncMock(),
+        ), session, repository
+
+    async def test_returns_user_inserted_by_the_other_update(self, user_factory, user_repository):
+        await user_factory(telegram_id=555)
+        existing = await user_repository.get_by_telegram_id_with_exercises(555)
+        service, session, _ = self._service_losing_the_race(existing)
+
+        result = await service.get_user_by_telegram(telegram_id=555, tg_username="u", full_name="N")
+
+        assert result.id == existing.id
+        session.rollback.assert_awaited_once()
+
+    async def test_reraises_when_the_user_is_still_missing(self):
+        session = AsyncMock(spec=AsyncSession)
+        session.commit.side_effect = IntegrityError("INSERT", {}, Exception("duplicate key"))
+        repository = AsyncMock()
+        repository.get_by_telegram_id_with_exercises.return_value = None
+        service = UserService(
+            session=session,
+            user_repository=repository,
+            category_repository=AsyncMock(),
+        )
+
+        with pytest.raises(UserNotFoundError):
+            await service.get_user_by_telegram(telegram_id=556, tg_username="u", full_name="N")

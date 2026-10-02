@@ -1,4 +1,5 @@
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import UserNotFoundError
@@ -33,11 +34,15 @@ class UserService:
     ) -> UserWithExercisesDTO:
         user = await self._user_repository.get_by_telegram_id_with_exercises(telegram_id)
         if user is None:
-            user = await self.create_user(
-                telegram_id=telegram_id,
-                tg_username=tg_username,
-                full_name=full_name,
-            )
+            try:
+                user = await self.create_user(
+                    telegram_id=telegram_id,
+                    tg_username=tg_username,
+                    full_name=full_name,
+                )
+            except IntegrityError:
+                user = await self._recover_lost_creation_race(telegram_id)
+                return UserWithExercisesDTO.from_orm_obj(user)
             return UserWithExercisesDTO.from_orm_obj(user, load_exercises=False, load_category=False)
         is_updated = False
         if user.username != tg_username:
@@ -51,6 +56,20 @@ class UserService:
             await self._session.commit()
 
         return UserWithExercisesDTO.from_orm_obj(user)
+
+    async def _recover_lost_creation_race(self, telegram_id: int) -> User:
+        """Возвращает юзера, вставленного параллельным апдейтом.
+
+        Апдейты обрабатываются aiogram параллельно и без ограничения, поэтому два
+        подряд от нового юзера проходят проверку "юзера нет" оба и оба делают INSERT.
+        Второй ловит users_telegram_id_key и просто читает то, что вставил первый.
+        """
+        await self._session.rollback()
+        user = await self._user_repository.get_by_telegram_id_with_exercises(telegram_id)
+        if user is None:
+            raise UserNotFoundError(telegram_id)
+        logger.info("Lost the creation race for TG ID {}, using the existing user", telegram_id)
+        return user
 
     async def create_user(
             self,
