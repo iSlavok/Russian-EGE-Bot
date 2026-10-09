@@ -4,6 +4,7 @@ from sqlalchemy import String, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Exercise, UserAnswer
+from app.models.user_model import user_current_exercises
 from app.repositories import BaseRepository
 
 
@@ -49,6 +50,14 @@ class ExerciseRepository(BaseRepository[Exercise]):
         statement = statement.limit(limit)
         result = await self.session.execute(statement)
         return result.scalars().all()
+
+    async def get_current_exercise_ids(self, user_id: int) -> set[int]:
+        """Возвращает id упражнений, выданных юзеру последним заданием."""
+        statement = select(user_current_exercises.c.exercise_id).where(
+            user_current_exercises.c.user_id == user_id,
+        )
+        result = await self.session.execute(statement)
+        return set(result.scalars().all())
 
     async def get_random_distinct_group_filler(
         self,
