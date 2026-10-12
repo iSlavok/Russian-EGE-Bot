@@ -2,6 +2,9 @@ import random
 from collections import namedtuple
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import insert
+
+from app.models.user_model import user_current_exercises
 from app.repositories.exercise_filters import answer_eq
 from app.services.exercise_selector import ExerciseSelector
 
@@ -240,6 +243,24 @@ class TestPickAnswersThompson:
 
 
 # ===================================================================
+# _deprioritize  (unit tests — no DB)
+# ===================================================================
+
+class TestDeprioritize:
+    def test_moves_deprioritized_to_end_keeping_order(self):
+        scored = [(1, 0.9), (2, 0.8), (3, 0.7), (4, 0.6)]
+
+        result = ExerciseSelector._deprioritize(scored, {1, 3})
+
+        assert [eid for eid, _ in result] == [2, 4, 1, 3]
+
+    def test_empty_deprioritized_keeps_order(self):
+        scored = [(1, 0.9), (2, 0.8)]
+
+        assert ExerciseSelector._deprioritize(scored, set()) == scored
+
+
+# ===================================================================
 # select_smart  (integration tests — real DB)
 # ===================================================================
 
@@ -295,6 +316,52 @@ class TestSelectSmart:
 
         assert len(result) == 1
         assert result[0].id == ex.id
+
+    async def test_all_seen_does_not_repeat_current_exercise(
+        self,
+        db_session,
+        exercise_selector,
+        user_factory,
+        category_factory,
+        exercise_factory,
+        user_answer_factory,
+    ):
+        user = await user_factory()
+        cat = await category_factory()
+        current = await exercise_factory(category_id=cat.id)
+        other = await exercise_factory(category_id=cat.id)
+        for ex in (current, other):
+            await user_answer_factory(
+                user_id=user.id, exercise_id=ex.id, category_id=cat.id, is_correct=ex is other,
+            )
+        await db_session.execute(
+            insert(user_current_exercises).values(user_id=user.id, exercise_id=current.id),
+        )
+
+        for _ in range(20):
+            result = await exercise_selector.select_smart(cat.id, user.id, limit=1)
+            assert [e.id for e in result] == [other.id]
+
+    async def test_all_seen_single_exercise_pool_still_returns_current(
+        self,
+        db_session,
+        exercise_selector,
+        user_factory,
+        category_factory,
+        exercise_factory,
+        user_answer_factory,
+    ):
+        user = await user_factory()
+        cat = await category_factory()
+        only = await exercise_factory(category_id=cat.id)
+        await user_answer_factory(user_id=user.id, exercise_id=only.id, category_id=cat.id)
+        await db_session.execute(
+            insert(user_current_exercises).values(user_id=user.id, exercise_id=only.id),
+        )
+
+        result = await exercise_selector.select_smart(cat.id, user.id, limit=1)
+
+        assert [e.id for e in result] == [only.id]
 
     async def test_empty_category_returns_empty(
         self, exercise_selector, user_factory, category_factory,

@@ -69,8 +69,9 @@ class ExerciseSelector:
             scored = self._compute_thompson_scores(group_stats, exclude_groups)
             top_groups = [gid for gid, _ in scored[: limit - len(selected)]]
             if top_groups:
+                current_ids = await self._exercise_repository.get_current_exercise_ids(user_id)
                 group_exs = await self._exercise_repository.get_random_by_group_ids(
-                    category_id, top_groups, exclude_ids, filters,
+                    category_id, top_groups, exclude_ids | current_ids, filters,
                 )
                 selected.extend(group_exs)
 
@@ -237,7 +238,8 @@ class ExerciseSelector:
         if not stats_rows:
             return selected
 
-        scored = self._compute_thompson_scores(stats_rows, exclude_ids)
+        current_ids = await self._exercise_repository.get_current_exercise_ids(user_id)
+        scored = self._deprioritize(self._compute_thompson_scores(stats_rows, exclude_ids), current_ids)
         candidate_ids = [eid for eid, _ in scored]
         candidates = await self._exercise_repository.get_by_ids(candidate_ids)
         candidates_map = {ex.id: ex for ex in candidates}
@@ -251,6 +253,17 @@ class ExerciseSelector:
                     break
 
         return selected
+
+    @staticmethod
+    def _deprioritize(scored: list[tuple], deprioritized_ids: Container) -> list[tuple]:
+        """Переносит упражнения из deprioritized_ids в конец, сохраняя порядок остальных.
+
+        Не даёт выдать юзеру то же задание подряд, но не оставляет без задания,
+        если других кандидатов нет.
+        """
+        preferred = [item for item in scored if item[0] not in deprioritized_ids]
+        fallback = [item for item in scored if item[0] in deprioritized_ids]
+        return [*preferred, *fallback]
 
     @staticmethod
     def _compute_thompson_scores(
@@ -303,7 +316,8 @@ class ExerciseSelector:
         if not stats_rows:
             return []
 
-        scored = self._compute_thompson_scores(stats_rows, exclude_ids)
+        current_ids = await self._exercise_repository.get_current_exercise_ids(user_id)
+        scored = self._deprioritize(self._compute_thompson_scores(stats_rows, exclude_ids), current_ids)
         top_ids = [eid for eid, _ in scored[:limit]]
 
         return await self._exercise_repository.get_by_ids(top_ids)
