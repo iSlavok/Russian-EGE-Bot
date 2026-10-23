@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,8 @@ class Category(BaseDBModel):
     )
 
     is_ege_task: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True, nullable=True)
 
@@ -29,7 +31,7 @@ class Category(BaseDBModel):
         cascade="all, delete-orphan",
         primaryjoin="Category.parent_id == Category.id",
         foreign_keys="[Category.parent_id]",
-        order_by="Category.id.asc()",
+        order_by="(Category.position.asc(), Category.id.asc())",
     )
     parent: Mapped["Category | None"] = relationship(
         "Category",

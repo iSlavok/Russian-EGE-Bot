@@ -108,8 +108,16 @@ def category_factory(db_session):
         name: str = "Test Category",
         handler_type=None,
         parent_id: int | None = None,
+        position: int = 0,
+        is_hidden: bool = False,
     ) -> Category:
-        category = Category(name=name, handler_type=handler_type, parent_id=parent_id)
+        category = Category(
+            name=name,
+            handler_type=handler_type,
+            parent_id=parent_id,
+            position=position,
+            is_hidden=is_hidden,
+        )
         db_session.add(category)
         await db_session.flush()
         return category
