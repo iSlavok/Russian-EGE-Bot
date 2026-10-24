@@ -40,6 +40,7 @@ class UserAnswer(BaseDBModel):
 
     __table_args__ = (
         Index("ix_user_answers_user_id_created_at", "user_id", "created_at"),
+        Index("ix_user_answers_created_at", "created_at"),
     )
 
     def __repr__(self) -> str:

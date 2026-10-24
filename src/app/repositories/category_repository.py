@@ -15,8 +15,11 @@ class CategoryRepository(BaseRepository[Category]):
     async def get_roots(self) -> Sequence[Category]:
         statement = (
             select(Category)
-            .filter(Category.parent_id.is_(None))
-            .order_by(Category.id.asc())
+            .filter(
+                Category.parent_id.is_(None),
+                Category.is_hidden.is_(False),
+            )
+            .order_by(Category.position.asc(), Category.id.asc())
         )
         result = await self.session.execute(statement)
         return result.scalars().all()
@@ -25,7 +28,7 @@ class CategoryRepository(BaseRepository[Category]):
         statement = (
             select(Category)
             .filter_by(id=category_id)
-            .options(selectinload(Category.children))
+            .options(selectinload(Category.children.and_(Category.is_hidden.is_(False))))
         )
         result = await self.session.execute(statement)
         return result.scalars().first()

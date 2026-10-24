@@ -27,6 +27,22 @@ class TestGetRoots:
         assert roots[0].id == a.id
         assert roots[1].id == b.id
 
+    async def test_ordered_by_position_first(self, category_repository, category_factory):
+        late = await category_factory(name="Late", position=2)
+        early = await category_factory(name="Early", position=1)
+
+        roots = await category_repository.get_roots()
+
+        assert [r.id for r in roots] == [early.id, late.id]
+
+    async def test_skips_hidden(self, category_repository, category_factory):
+        shown = await category_factory(name="Shown")
+        await category_factory(name="Hidden", is_hidden=True)
+
+        roots = await category_repository.get_roots()
+
+        assert [r.id for r in roots] == [shown.id]
+
 
 class TestGetByIdWithChildren:
     async def test_returns_category_with_children(self, category_repository, category_factory):
@@ -63,6 +79,18 @@ class TestGetByIdWithChildren:
         assert result is not None
         assert len(result.children) == 1
         assert result.children[0].id == child.id
+
+
+    async def test_children_ordered_by_position_and_hidden_skipped(self, category_repository, category_factory):
+        parent = await category_factory(name="Parent")
+        second = await category_factory(name="Second", parent_id=parent.id, position=2)
+        first = await category_factory(name="First", parent_id=parent.id, position=1)
+        await category_factory(name="Hidden", parent_id=parent.id, is_hidden=True)
+
+        result = await category_repository.get_by_id_with_children(parent.id)
+
+        assert result is not None
+        assert [c.id for c in result.children] == [first.id, second.id]
 
 
 class TestGetByIdWithTree:
